@@ -1,0 +1,32 @@
+id = "oxk-arkts"
+name = "ArkTS"
+description = "ArkTS language support for Zed with tree-sitter highlighting, formatting, and lint diagnostics."
+version = "0.1.0"
+schema_version = 1
+authors = ["ranger"]
+repository = "https://github.com/ranger/oxk-zed"
+
+[grammars.arkts]
+repository = "https://github.com/harmony-contrib/tree-sitter-arkts"
+rev = "3a6dd89c121c9ace24cc3642d62985d083145941"
+
+[language_servers.arkts-language-server]
+name = "ArkTS Language Server"
+language = "ArkTS"
+
+[language_servers.arkts-language-server.language_ids]
+"ArkTS" = "ets"
+
+[language_servers.oxk-formatter]
+name = "Oxk Formatter"
+language = "ArkTS"
+
+[language_servers.oxk-formatter.language_ids]
+"ArkTS" = "ets"
+
+[language_servers.oxk-linter]
+name = "Oxk Linter"
+language = "ArkTS"
+
+[language_servers.oxk-linter.language_ids]
+"ArkTS" = "ets"
