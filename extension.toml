@@ -3,8 +3,8 @@ name = "ArkTS"
 description = "ArkTS language support for Zed with tree-sitter highlighting, formatting, and lint diagnostics."
 version = "0.1.0"
 schema_version = 1
-authors = ["ranger"]
-repository = "https://github.com/ranger/oxk-zed"
+authors = ["richerfu"]
+repository = "https://github.com/harmony-contrib/oxk-zed"
 
 [grammars.arkts]
 repository = "https://github.com/harmony-contrib/tree-sitter-arkts"
