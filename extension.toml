@@ -1,4 +1,4 @@
-id = "oxk-arkts"
+id = "oxk"
 name = "ArkTS"
 description = "ArkTS language support for Zed with tree-sitter highlighting, formatting, and lint diagnostics."
 version = "0.1.0"
