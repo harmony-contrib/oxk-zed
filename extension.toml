@@ -20,9 +20,50 @@ language = "ArkTS"
 [language_servers.oxk-formatter]
 name = "Oxk Formatter"
 language = "ArkTS"
+languages = [
+  "ArkTS",
+  "JavaScript",
+  "JSX",
+  "TypeScript",
+  "TSX",
+  "Vue.js",
+  "JSON",
+  "JSON5",
+  "JSONC",
+  "HTML",
+  "CSS",
+  "SCSS",
+  "LESS",
+  "Angular",
+  "GraphQL",
+  "Handlebars",
+  "Markdown",
+  "MDX",
+  "YAML",
+  "TOML",
+]
 
 [language_servers.oxk-formatter.language_ids]
+"Angular" = "angular"
 "ArkTS" = "ets"
+"CSS" = "css"
+"GraphQL" = "graphql"
+"HTML" = "html"
+"Handlebars" = "handlebars"
+"JSON" = "json"
+"JSON5" = "json5"
+"JSONC" = "jsonc"
+"JSX" = "javascriptreact"
+"JavaScript" = "javascript"
+"LESS" = "less"
+"MDX" = "mdx"
+"Markdown" = "markdown"
+"SCSS" = "scss"
+"TOML" = "toml"
+"TSX" = "typescriptreact"
+"TypeScript" = "typescript"
+"Vue.js" = "vue"
+"YAML" = "yaml"
 
 [language_servers.oxk-linter]
 name = "Oxk Linter"

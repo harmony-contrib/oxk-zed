@@ -6,7 +6,7 @@ Zed extension for ArkTS (`.ets`) files.
 
 - Syntax highlighting via `harmony-contrib/tree-sitter-arkts`
 - ArkTS language features through `@arkts/language-server`
-- ArkTS formatting through `@ohos-rs/oxk format --lsp`
+- Formatting through `@ohos-rs/oxk format --lsp` for ArkTS and the Oxfmt-compatible languages registered by the extension
 - ArkTS lint diagnostics and code actions through `@ohos-rs/oxk lint --lsp`
 
 ## Setup
@@ -57,6 +57,8 @@ Use `arkts-language-server` for the main language server, `oxk-formatter` as the
 ```
 
 `arkts-language-server` settings are normalized before being passed to `@arkts/language-server`. The server itself requires `ets.sdkPath`, but the extension also accepts `arkts.SDK_HOME`, `arkts.sdkPath`, top-level `SDK_HOME`, `ohos.sdkPath`, and the shell environment variable `SDK_HOME`. `HMS_HOME`/`hmsPath` are normalized to `ets.hmsPath`.
+
+`oxk-formatter` is registered for `ArkTS`, `JavaScript`, `JSX`, `TypeScript`, `TSX`, `Vue.js`, `JSON`, `JSON5`, `JSONC`, `HTML`, `CSS`, `SCSS`, `LESS`, `Angular`, `GraphQL`, `Handlebars`, `Markdown`, `MDX`, `YAML`, and `TOML`.
 
 `fmt.configPath`, `configPath`, `tsConfigPath`, `run`, and `fixKind` are oxk/oxc language-server options. ArkTS lint rules are configured through `.oxlintrc.*`; rules are opt-in unless enabled by that config.
 
