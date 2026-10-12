@@ -11,3 +11,30 @@ crate-type = ["cdylib"]
 
 [dependencies]
 zed_extension_api = "0.7.0"
+arkts-sdk = { path = "crates/arkts-sdk" }
+
+[dev-dependencies]
+wasmparser = "0.227.1"
+
+[workspace]
+members = [".", "crates/arkts-sdk", "crates/arkts-services", "crates/arkts-lsp"]
+default-members = ["."]
+resolver = "2"
+
+[workspace.dependencies]
+serde_json = "1"
+json5 = "1"
+oxc_allocator = { path = "../oxc/crates/oxc_allocator" }
+oxc_ast = { path = "../oxc/crates/oxc_ast" }
+oxc_ast_visit = { path = "../oxc/crates/oxc_ast_visit" }
+oxc_parser = { path = "../oxc/crates/oxc_parser" }
+oxc_span = { path = "../oxc/crates/oxc_span" }
+tsrs_core = { path = "../../ohos-rs/tsrs/crates/tsrs_core" }
+tsrs_lsp = { path = "../../ohos-rs/tsrs/crates/tsrs_lsp" }
+tsrs_ls = { path = "../../ohos-rs/tsrs/crates/tsrs_ls" }
+tsrs_lsproto = { path = "../../ohos-rs/tsrs/crates/tsrs_lsproto" }
+tsrs_vfs = { path = "../../ohos-rs/tsrs/crates/tsrs_vfs" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

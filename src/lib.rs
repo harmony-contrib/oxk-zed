@@ -1,7 +1,7 @@
-use std::{env, fs, path::Path};
+use std::env;
 
 use zed::{
-    serde_json::{json, Map, Value},
+    serde_json::{json, Value},
     settings::LspSettings,
     LanguageServerId, Worktree,
 };
@@ -10,12 +10,9 @@ use zed_extension_api as zed;
 const ARKTS_SERVER_ID: &str = "arkts-language-server";
 const FORMATTER_SERVER_ID: &str = "oxk-formatter";
 const LINTER_SERVER_ID: &str = "oxk-linter";
-const ARKTS_PACKAGE: &str = "@arkts/language-server";
 const OXK_PACKAGE: &str = "@ohos-rs/oxk";
-const ARKTS_SERVER_BIN: &str = "node_modules/@arkts/language-server/bin/ets-language-server.js";
-const ARKTS_WRAPPER_BIN: &str = "server/arkts-lsp-wrapper.js";
 const OXK_BIN: &str = "node_modules/@ohos-rs/oxk/bin/oxk.js";
-const ARKTS_WRAPPER_SOURCE: &str = include_str!("../server/arkts-lsp-wrapper.js");
+const LOCAL_SERVER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/target/release/arkts-lsp");
 
 struct OxkExtension;
 
@@ -93,57 +90,23 @@ impl OxkExtension {
         })
     }
 
-    fn ensure_arkts_wrapper() -> zed::Result<String> {
-        let wrapper_path = Self::current_dir_path(ARKTS_WRAPPER_BIN)?;
-        let path = Path::new(&wrapper_path);
-
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
-                format!(
-                    "failed to create ArkTS language server wrapper directory {}: {error}",
-                    parent.display()
-                )
-            })?;
-        }
-
-        let should_write = fs::read_to_string(path)
-            .map(|current| current != ARKTS_WRAPPER_SOURCE)
-            .unwrap_or(true);
-
-        if should_write {
-            fs::write(path, ARKTS_WRAPPER_SOURCE).map_err(|error| {
-                format!(
-                    "failed to write ArkTS language server wrapper {}: {error}",
-                    path.display()
-                )
-            })?;
-        }
-
-        Ok(wrapper_path)
-    }
-
     fn arkts_language_server_command(
         language_server_id: &LanguageServerId,
         worktree: &Worktree,
     ) -> zed::Result<zed::Command> {
+        let args = vec!["--stdio".to_string()];
         if let Some(command) =
-            Self::binary_command_from_settings(language_server_id, worktree, Vec::new())
+            Self::binary_command_from_settings(language_server_id, worktree, args.clone())
         {
             return Ok(command);
         }
-
-        Self::ensure_npm_package(language_server_id, ARKTS_PACKAGE)?;
-
-        let wrapper_path = Self::ensure_arkts_wrapper()?;
-        let server_path = Self::current_dir_path(ARKTS_SERVER_BIN)?;
-        let mut env = Self::shell_env_for(worktree);
-        env.push(("ARKTS_LANGUAGE_SERVER_PATH".to_string(), server_path));
-
-        Ok(zed::Command {
-            command: zed::node_binary_path()?,
-            args: vec![wrapper_path],
-            env,
-        })
+        let env = Self::shell_env_for(worktree);
+        let command = env.iter().find(|(key, _)| key == "ARKTS_LSP_PATH")
+            .map(|(_, value)| value.clone())
+            .or_else(|| worktree.which("arkts-lsp"))
+            .or_else(|| worktree.which(LOCAL_SERVER))
+            .ok_or_else(|| "arkts-lsp was not found. Build with scripts/build-local.sh, put arkts-lsp on PATH, or set lsp.arkts-language-server.binary.path.".to_string())?;
+        Ok(zed::Command { command, args, env })
     }
 
     fn oxk_language_server_command(
@@ -171,97 +134,8 @@ impl OxkExtension {
         })
     }
 
-    fn value_from_map(object: &Map<String, Value>, keys: &[&str]) -> Option<Value> {
-        keys.iter().find_map(|key| {
-            object
-                .get(*key)
-                .filter(|value| value.as_str().is_some_and(|value| !value.is_empty()))
-                .cloned()
-        })
-    }
-
-    fn merge_arkts_sdk_aliases(target: &mut Map<String, Value>, source: &Map<String, Value>) {
-        if !target.contains_key("sdkPath") {
-            if let Some(value) = Self::value_from_map(
-                source,
-                &[
-                    "sdkPath",
-                    "SDK_HOME",
-                    "sdkHome",
-                    "ohosSdkPath",
-                    "OHOS_SDK_HOME",
-                ],
-            ) {
-                target.insert("sdkPath".to_string(), value);
-            }
-        }
-
-        if !target.contains_key("hmsPath") {
-            if let Some(value) = Self::value_from_map(
-                source,
-                &[
-                    "hmsPath",
-                    "HMS_HOME",
-                    "hmsHome",
-                    "hmsSdkPath",
-                    "HMS_SDK_HOME",
-                ],
-            ) {
-                target.insert("hmsPath".to_string(), value);
-            }
-        }
-    }
-
-    fn shell_env_aliases(worktree: &Worktree) -> Map<String, Value> {
-        Self::shell_env_for(worktree)
-            .into_iter()
-            .filter_map(|(key, value)| match key.as_str() {
-                "SDK_HOME" | "OHOS_SDK_HOME" | "HMS_HOME" | "HMS_SDK_HOME" => {
-                    Some((key, Value::String(value)))
-                }
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn normalize_arkts_initialization_options(mut options: Value, worktree: &Worktree) -> Value {
-        let Some(object) = options.as_object_mut() else {
-            return options;
-        };
-
-        let mut ets = object
-            .get("ets")
-            .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default();
-
-        let current_ets = ets.clone();
-        Self::merge_arkts_sdk_aliases(&mut ets, &current_ets);
-
-        for key in ["arkts", "ohos"] {
-            if let Some(source) = object.get(key).and_then(Value::as_object) {
-                Self::merge_arkts_sdk_aliases(&mut ets, source);
-            }
-        }
-
-        Self::merge_arkts_sdk_aliases(&mut ets, object);
-        Self::merge_arkts_sdk_aliases(&mut ets, &Self::shell_env_aliases(worktree));
-
-        if !ets.is_empty() {
-            object.insert("ets".to_string(), Value::Object(ets));
-        }
-
-        if let Some(tsdk) = Self::value_from_map(object, &["tsdk", "TSDK", "typescriptSdkPath"]) {
-            let mut typescript = object
-                .get("typescript")
-                .and_then(Value::as_object)
-                .cloned()
-                .unwrap_or_default();
-            typescript.entry("tsdk".to_string()).or_insert(tsdk);
-            object.insert("typescript".to_string(), Value::Object(typescript));
-        }
-
-        options
+    fn normalize_arkts_initialization_options(options: Value, worktree: &Worktree) -> Value {
+        arkts_sdk::normalize(options, &Self::shell_env_for(worktree))
     }
 }
 
@@ -283,7 +157,7 @@ impl zed::Extension for OxkExtension {
             LINTER_SERVER_ID => {
                 Self::oxk_language_server_command(language_server_id, worktree, "lint")
             }
-            unknown => return Err(format!("unknown language server: {unknown}")),
+            unknown => Err(format!("unknown language server: {unknown}")),
         }
     }
 
@@ -292,12 +166,9 @@ impl zed::Extension for OxkExtension {
         language_server_id: &LanguageServerId,
         worktree: &Worktree,
     ) -> zed::Result<Option<Value>> {
-        let Some(settings) = Self::settings_for(language_server_id, worktree) else {
-            return Ok(None);
-        };
+        let settings = Self::settings_for(language_server_id, worktree).unwrap_or_default();
 
-        if settings.initialization_options.is_some() {
-            let initialization_options = settings.initialization_options.unwrap();
+        if let Some(initialization_options) = settings.initialization_options {
             if language_server_id.as_ref() == ARKTS_SERVER_ID {
                 return Ok(Some(Self::normalize_arkts_initialization_options(
                     initialization_options,
@@ -308,9 +179,10 @@ impl zed::Extension for OxkExtension {
         }
 
         if language_server_id.as_ref() == ARKTS_SERVER_ID {
-            return Ok(settings
-                .settings
-                .map(|settings| Self::normalize_arkts_initialization_options(settings, worktree)));
+            return Ok(Some(Self::normalize_arkts_initialization_options(
+                settings.settings.unwrap_or_else(|| json!({})),
+                worktree,
+            )));
         }
 
         Ok(settings
@@ -323,14 +195,13 @@ impl zed::Extension for OxkExtension {
         language_server_id: &LanguageServerId,
         worktree: &Worktree,
     ) -> zed::Result<Option<Value>> {
-        let Some(settings) = Self::settings_for(language_server_id, worktree) else {
-            return Ok(None);
-        };
+        let settings = Self::settings_for(language_server_id, worktree).unwrap_or_default();
 
         if language_server_id.as_ref() == ARKTS_SERVER_ID {
-            return Ok(settings
-                .settings
-                .map(|settings| Self::normalize_arkts_initialization_options(settings, worktree)));
+            return Ok(Some(Self::normalize_arkts_initialization_options(
+                settings.settings.unwrap_or_else(|| json!({})),
+                worktree,
+            )));
         }
 
         Ok(settings.settings)

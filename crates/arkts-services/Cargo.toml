@@ -1,0 +1,18 @@
+[package]
+name = "arkts-services"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Reusable ArkTS resource navigation, diagnostics, completion and binding documentation"
+
+[dependencies]
+arkts-sdk = { path = "../arkts-sdk" }
+serde_json.workspace = true
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_ast_visit.workspace = true
+oxc_parser.workspace = true
+oxc_span.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

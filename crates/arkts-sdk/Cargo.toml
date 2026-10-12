@@ -1,0 +1,13 @@
+[package]
+name = "arkts-sdk"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Editor-independent ArkTS SDK configuration and tsconfig adaptation"
+
+[dependencies]
+serde_json.workspace = true
+json5.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
