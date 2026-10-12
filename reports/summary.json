@@ -1,0 +1,952 @@
+{
+  "environment": {
+    "os": "15.1.1",
+    "architecture": "arm64",
+    "cpu": "Apple M2 Max",
+    "physical_memory_gib": 32.0,
+    "rust": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "node": "v24.14.0",
+    "oxc_commit": "230deff13c3d0baddb9560ba895ee2b6a3fc4b7e",
+    "tsrs_commit": "7308ab7f29516b3330d9d0dad4945b571b54772c",
+    "legacy_version": "1.3.10",
+    "native_sha256": "22a35e2ae56553145f46761a81cdb3c982920f21b7e6bf4323aa2a7f09f53ba7",
+    "wasm_sha256": "443ecba23a3ecdbf357885a8e8e71d580fcaee8e756fd223962b81208b8e46cc"
+  },
+  "methodology": {
+    "runs": 3,
+    "warm_requests_per_run": 100,
+    "edits_per_run": 200,
+    "rss_sample_interval_ms": 50,
+    "settled_rss_last_samples": 5,
+    "sdk": "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony",
+    "aggregates": "median of run medians or run P95s; ranges are run min/max, not confidence intervals"
+  },
+  "benchmark": {
+    "102": {
+      "legacy": {
+        "startup_ms": {
+          "median": 653.3424160443246,
+          "min": 360.19070795737207,
+          "max": 741.6732920100912
+        },
+        "idle_rss_mib": {
+          "median": 680.5,
+          "min": 672.0625,
+          "max": 692.484375
+        },
+        "after_edits_rss_mib": {
+          "median": 1410.6875,
+          "min": 1111.28125,
+          "max": 1421.0625
+        },
+        "after_reopen_rss_mib": {
+          "median": 1434.421875,
+          "min": 1112.453125,
+          "max": 1443.5
+        },
+        "peak_tree_rss_mib": {
+          "median": 1434.421875,
+          "min": 1112.453125,
+          "max": 1443.5625
+        },
+        "warm_hover": {
+          "median_ms": {
+            "median": 0.5163539899513125,
+            "min": 0.482666480820626,
+            "max": 0.5444585112854838
+          },
+          "p95_ms": {
+            "median": 0.9294580668210983,
+            "min": 0.83220808301121,
+            "max": 1.022165990434587
+          }
+        },
+        "edit_hover": {
+          "median_ms": {
+            "median": 45.21558352280408,
+            "min": 43.60733350040391,
+            "max": 46.47893743822351
+          },
+          "p95_ms": {
+            "median": 51.25283298548311,
+            "min": 48.33929205778986,
+            "max": 57.691791909746826
+          }
+        },
+        "initialize_plus_first_hover_ms": {
+          "median": 1822.54450104665,
+          "min": 1435.4109580162913,
+          "max": 1898.1949160806835
+        },
+        "cpu_seconds": {
+          "median": 15.489999999999998,
+          "min": 14.38,
+          "max": 15.58
+        },
+        "latency_ms": {
+          "initialize": {
+            "median": 646.2142079835758,
+            "min": 356.84783302713186,
+            "max": 739.2766250995919
+          },
+          "hover": {
+            "median": 1080.8712090365589,
+            "min": 1075.2202500589192,
+            "max": 1244.8525000363588
+          },
+          "definition": {
+            "median": 3.867999999783933,
+            "min": 3.751792013645172,
+            "max": 4.097917000763118
+          },
+          "typeDefinition": {
+            "median": 148.96141598001122,
+            "min": 2.0941670518368483,
+            "max": 150.6311249686405
+          },
+          "references": {
+            "median": 58.55016701389104,
+            "min": 50.863125012256205,
+            "max": 60.86545903235674
+          },
+          "prepareRename": {
+            "median": 2.881125081330538,
+            "min": 1.3122500386089087,
+            "max": 6.712374975904822
+          },
+          "rename": {
+            "median": 2.409375039860606,
+            "min": 2.1821249974891543,
+            "max": 811.3497500307858
+          },
+          "completion": {
+            "median": 8.952624979428947,
+            "min": 8.268916979432106,
+            "max": 11.62437500897795
+          },
+          "signatureHelp": {
+            "median": 807.043791981414,
+            "min": 1.8132919212803245,
+            "max": 821.6917500831187
+          },
+          "documentSymbol": {
+            "median": 2.7095830300822854,
+            "min": 2.653916017152369,
+            "max": 2.8675420908257365
+          },
+          "documentHighlight": {
+            "median": 1.1307090753689408,
+            "min": 1.0925839887931943,
+            "max": 1.1993750231340528
+          },
+          "foldingRange": {
+            "median": 1.3480420457199216,
+            "min": 1.2828749604523182,
+            "max": 1.5216669999063015
+          },
+          "selectionRange": {
+            "median": 1.0310000507161021,
+            "min": 1.0216670343652368,
+            "max": 1.3479170156642795
+          },
+          "inlayHint": {
+            "median": 1.3127910206094384,
+            "min": 1.2659579515457153,
+            "max": 1.5402500284835696
+          },
+          "diagnostic": {
+            "median": 19.206249970011413,
+            "min": 18.183000036515296,
+            "max": 19.66562506277114
+          },
+          "workspaceSymbol": {
+            "median": 42.575082974508405,
+            "min": 41.822958970442414,
+            "max": 43.88037498574704
+          },
+          "codeAction": {
+            "median": 10.959584033116698,
+            "min": 10.687083005905151,
+            "max": 67.76866700965911
+          },
+          "completionResolve": {
+            "median": 2.985832979902625,
+            "min": 2.7112499810755253,
+            "max": 3.5060420632362366
+          },
+          "diagnosticAfterEdits": {
+            "median": 142.3557500820607,
+            "min": 133.4779589669779,
+            "max": 144.6045000338927
+          }
+        },
+        "memory_growth_mib": {
+          "median": 718.203125,
+          "min": 439.21875,
+          "max": 740.5625
+        },
+        "exit_codes": [
+          1,
+          1,
+          1
+        ],
+        "implementations": [
+          {
+            "version": "1.3.10",
+            "wrapper_sha256": "7372b18b92cd63999e2ca5b7ab0f588774509bff2df420ae3e5bb65795ed302d"
+          },
+          {
+            "version": "1.3.10",
+            "wrapper_sha256": "7372b18b92cd63999e2ca5b7ab0f588774509bff2df420ae3e5bb65795ed302d"
+          },
+          {
+            "version": "1.3.10",
+            "wrapper_sha256": "7372b18b92cd63999e2ca5b7ab0f588774509bff2df420ae3e5bb65795ed302d"
+          }
+        ],
+        "protocol_errors": {
+          "1": {},
+          "2": {},
+          "3": {}
+        }
+      },
+      "native": {
+        "startup_ms": {
+          "median": 18.822167068719864,
+          "min": 15.785624971613288,
+          "max": 19.434708054177463
+        },
+        "idle_rss_mib": {
+          "median": 169.375,
+          "min": 168.140625,
+          "max": 169.546875
+        },
+        "after_edits_rss_mib": {
+          "median": 200.53125,
+          "min": 192.96875,
+          "max": 219.921875
+        },
+        "after_reopen_rss_mib": {
+          "median": 181.796875,
+          "min": 174.265625,
+          "max": 201.1875
+        },
+        "peak_tree_rss_mib": {
+          "median": 200.53125,
+          "min": 192.96875,
+          "max": 219.921875
+        },
+        "warm_hover": {
+          "median_ms": {
+            "median": 0.11818757047876716,
+            "min": 0.11697894660755992,
+            "max": 0.12410397175699472
+          },
+          "p95_ms": {
+            "median": 0.2554580569267273,
+            "min": 0.25450007524341345,
+            "max": 0.25824992917478085
+          }
+        },
+        "edit_hover": {
+          "median_ms": {
+            "median": 11.688353959470987,
+            "min": 11.645313003100455,
+            "max": 11.886729043908417
+          },
+          "p95_ms": {
+            "median": 13.168749981559813,
+            "min": 13.016584096476436,
+            "max": 13.938791933469474
+          }
+        },
+        "initialize_plus_first_hover_ms": {
+          "median": 63.80900111980736,
+          "min": 46.922291978262365,
+          "max": 64.86487505026162
+        },
+        "cpu_seconds": {
+          "median": 3.0,
+          "min": 2.88,
+          "max": 3.0
+        },
+        "latency_ms": {
+          "initialize": {
+            "median": 14.493291964754462,
+            "min": 13.388958061113954,
+            "max": 16.256207949481905
+          },
+          "hover": {
+            "median": 44.9868340510875,
+            "min": 31.136667006649077,
+            "max": 45.430166996084154
+          },
+          "definition": {
+            "median": 0.22304197773337364,
+            "min": 0.17308304086327553,
+            "max": 0.6076660938560963
+          },
+          "typeDefinition": {
+            "median": 0.12574996799230576,
+            "min": 0.10783295147120953,
+            "max": 0.382124911993742
+          },
+          "references": {
+            "median": 1.7217081040143967,
+            "min": 1.6940420027822256,
+            "max": 3.2283340115100145
+          },
+          "prepareRename": {
+            "median": 0.14579202979803085,
+            "min": 0.11766701936721802,
+            "max": 0.407207990065217
+          },
+          "rename": {
+            "median": 0.25824992917478085,
+            "min": 0.23733300622552633,
+            "max": 0.5782919470220804
+          },
+          "completion": {
+            "median": 0.3362500574439764,
+            "min": 0.28908299282193184,
+            "max": 0.44404203072190285
+          },
+          "signatureHelp": {
+            "median": 0.21758303046226501,
+            "min": 0.15020801220089197,
+            "max": 0.2212079707533121
+          },
+          "documentSymbol": {
+            "median": 0.20987493917346,
+            "min": 0.18879200797528028,
+            "max": 0.4877919564023614
+          },
+          "documentHighlight": {
+            "median": 0.1830410910770297,
+            "min": 0.14716701116412878,
+            "max": 0.20066602155566216
+          },
+          "foldingRange": {
+            "median": 0.17791602294892073,
+            "min": 0.14849996659904718,
+            "max": 0.33370801247656345
+          },
+          "selectionRange": {
+            "median": 0.13212498743087053,
+            "min": 0.1154160127043724,
+            "max": 0.1485419925302267
+          },
+          "inlayHint": {
+            "median": 0.16062497161328793,
+            "min": 0.11066603474318981,
+            "max": 0.16091694124042988
+          },
+          "diagnostic": {
+            "median": 29.167542001232505,
+            "min": 26.468624942936003,
+            "max": 30.487834010273218
+          },
+          "workspaceSymbol": {
+            "median": 17.337166937068105,
+            "min": 17.27104198653251,
+            "max": 17.47933402657509
+          },
+          "codeAction": {
+            "median": 1.1762090725824237,
+            "min": 1.1492500780150294,
+            "max": 1.28820794634521
+          },
+          "completionResolve": {
+            "median": 0.440209056250751,
+            "min": 0.3002089215442538,
+            "max": 0.6060419837012887
+          },
+          "diagnosticAfterEdits": {
+            "median": 25.570584111846983,
+            "min": 23.481708019971848,
+            "max": 27.093665907159448
+          }
+        },
+        "memory_growth_mib": {
+          "median": 32.390625,
+          "min": 23.421875,
+          "max": 50.546875
+        },
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "implementations": [
+          {
+            "binary_sha256": "22a35e2ae56553145f46761a81cdb3c982920f21b7e6bf4323aa2a7f09f53ba7"
+          },
+          {
+            "binary_sha256": "22a35e2ae56553145f46761a81cdb3c982920f21b7e6bf4323aa2a7f09f53ba7"
+          },
+          {
+            "binary_sha256": "22a35e2ae56553145f46761a81cdb3c982920f21b7e6bf4323aa2a7f09f53ba7"
+          }
+        ],
+        "protocol_errors": {
+          "1": {},
+          "2": {},
+          "3": {}
+        }
+      }
+    },
+    "1002": {
+      "legacy": {
+        "startup_ms": {
+          "median": 368.1590830674395,
+          "min": 248.95133392419666,
+          "max": 627.5929580442607
+        },
+        "idle_rss_mib": {
+          "median": 786.453125,
+          "min": 776.828125,
+          "max": 790.5
+        },
+        "after_edits_rss_mib": {
+          "median": 1257.453125,
+          "min": 1244.5625,
+          "max": 1290.453125
+        },
+        "after_reopen_rss_mib": {
+          "median": 1277.15625,
+          "min": 1265.59375,
+          "max": 1311.328125
+        },
+        "peak_tree_rss_mib": {
+          "median": 1277.625,
+          "min": 1266.1875,
+          "max": 1311.796875
+        },
+        "warm_hover": {
+          "median_ms": {
+            "median": 1.4168749912641943,
+            "min": 1.4124585432000458,
+            "max": 1.5162085182964802
+          },
+          "p95_ms": {
+            "median": 2.606416936032474,
+            "min": 2.542792004533112,
+            "max": 2.7780840173363686
+          }
+        },
+        "edit_hover": {
+          "median_ms": {
+            "median": 61.953124997671694,
+            "min": 61.082999978680164,
+            "max": 62.22691695438698
+          },
+          "p95_ms": {
+            "median": 67.8534999024123,
+            "min": 67.19233305193484,
+            "max": 70.22524997591972
+          }
+        },
+        "initialize_plus_first_hover_ms": {
+          "median": 1496.4312489610165,
+          "min": 1332.423792919144,
+          "max": 1834.5474579837173
+        },
+        "cpu_seconds": {
+          "median": 20.45,
+          "min": 20.119999999999997,
+          "max": 20.59
+        },
+        "latency_ms": {
+          "initialize": {
+            "median": 365.9472910221666,
+            "min": 246.98662501759827,
+            "max": 624.9951249919832
+          },
+          "hover": {
+            "median": 1128.272165893577,
+            "min": 1083.4724589949474,
+            "max": 1206.9544999394566
+          },
+          "definition": {
+            "median": 5.672625033184886,
+            "min": 5.008084001019597,
+            "max": 5.871624918654561
+          },
+          "typeDefinition": {
+            "median": 2.6703339535743,
+            "min": 2.6414580643177032,
+            "max": 2.76741711422801
+          },
+          "references": {
+            "median": 310.91283296700567,
+            "min": 303.2634579576552,
+            "max": 339.1080000437796
+          },
+          "prepareRename": {
+            "median": 9.392375010065734,
+            "min": 2.5767909828573465,
+            "max": 12.365125003270805
+          },
+          "rename": {
+            "median": 4.551583086140454,
+            "min": 4.422792000696063,
+            "max": 9.394332999363542
+          },
+          "completion": {
+            "median": 11.57687499653548,
+            "min": 11.531959054991603,
+            "max": 12.996167060919106
+          },
+          "signatureHelp": {
+            "median": 958.8046659482643,
+            "min": 924.9052500817925,
+            "max": 1018.528165994212
+          },
+          "documentSymbol": {
+            "median": 3.6218749592080712,
+            "min": 3.3575830748304725,
+            "max": 4.032499971799552
+          },
+          "documentHighlight": {
+            "median": 1.971582998521626,
+            "min": 1.8694170285016298,
+            "max": 2.206292003393173
+          },
+          "foldingRange": {
+            "median": 2.535667037591338,
+            "min": 1.9147919956594706,
+            "max": 3.623541910201311
+          },
+          "selectionRange": {
+            "median": 2.631625044159591,
+            "min": 2.1241670474410057,
+            "max": 3.0628329841420054
+          },
+          "inlayHint": {
+            "median": 2.650707960128784,
+            "min": 2.440250013023615,
+            "max": 2.9034579638391733
+          },
+          "diagnostic": {
+            "median": 46.66416591499001,
+            "min": 43.194124940782785,
+            "max": 50.60987500473857
+          },
+          "workspaceSymbol": {
+            "median": 49.32216601446271,
+            "min": 46.95729201193899,
+            "max": 49.952125060372055
+          },
+          "codeAction": {
+            "median": 12.99354201182723,
+            "min": 12.977167032659054,
+            "max": 13.081667013466358
+          },
+          "completionResolve": {
+            "median": 3.5154999932274222,
+            "min": 3.0152919935062528,
+            "max": 3.8696250412613153
+          },
+          "diagnosticAfterEdits": {
+            "median": 266.60412491764873,
+            "min": 260.1645840331912,
+            "max": 275.52179200574756
+          }
+        },
+        "memory_growth_mib": {
+          "median": 467.734375,
+          "min": 466.953125,
+          "max": 504.0
+        },
+        "exit_codes": [
+          1,
+          1,
+          1
+        ],
+        "implementations": [
+          {
+            "version": "1.3.10",
+            "wrapper_sha256": "7372b18b92cd63999e2ca5b7ab0f588774509bff2df420ae3e5bb65795ed302d"
+          },
+          {
+            "version": "1.3.10",
+            "wrapper_sha256": "7372b18b92cd63999e2ca5b7ab0f588774509bff2df420ae3e5bb65795ed302d"
+          },
+          {
+            "version": "1.3.10",
+            "wrapper_sha256": "7372b18b92cd63999e2ca5b7ab0f588774509bff2df420ae3e5bb65795ed302d"
+          }
+        ],
+        "protocol_errors": {
+          "1": {},
+          "2": {},
+          "3": {}
+        }
+      },
+      "native": {
+        "startup_ms": {
+          "median": 22.19879103358835,
+          "min": 15.849458053708076,
+          "max": 22.313333000056446
+        },
+        "idle_rss_mib": {
+          "median": 230.203125,
+          "min": 229.125,
+          "max": 230.515625
+        },
+        "after_edits_rss_mib": {
+          "median": 295.375,
+          "min": 295.28125,
+          "max": 298.234375
+        },
+        "after_reopen_rss_mib": {
+          "median": 259.625,
+          "min": 259.5625,
+          "max": 262.484375
+        },
+        "peak_tree_rss_mib": {
+          "median": 295.375,
+          "min": 295.28125,
+          "max": 298.234375
+        },
+        "warm_hover": {
+          "median_ms": {
+            "median": 0.10731251677498221,
+            "min": 0.10489602573215961,
+            "max": 0.11366698890924454
+          },
+          "p95_ms": {
+            "median": 0.17187499906867743,
+            "min": 0.1700409920886159,
+            "max": 0.2115418901666999
+          }
+        },
+        "edit_hover": {
+          "median_ms": {
+            "median": 17.407271021511406,
+            "min": 16.91152050625533,
+            "max": 17.54343748325482
+          },
+          "p95_ms": {
+            "median": 19.418166019022465,
+            "min": 18.264958052895963,
+            "max": 19.712500041350722
+          }
+        },
+        "initialize_plus_first_hover_ms": {
+          "median": 119.42395800724626,
+          "min": 64.61562507320195,
+          "max": 162.46633301489055
+        },
+        "cpu_seconds": {
+          "median": 4.43,
+          "min": 4.39,
+          "max": 4.569999999999999
+        },
+        "latency_ms": {
+          "initialize": {
+            "median": 19.11779202055186,
+            "min": 13.024999992921948,
+            "max": 19.161041942425072
+          },
+          "hover": {
+            "median": 97.2251669736579,
+            "min": 48.76616701949388,
+            "max": 140.1530000148341
+          },
+          "definition": {
+            "median": 0.2590829972177744,
+            "min": 0.22479193285107613,
+            "max": 0.33229205291718245
+          },
+          "typeDefinition": {
+            "median": 0.17870799638330936,
+            "min": 0.15933311078697443,
+            "max": 0.2682909835129976
+          },
+          "references": {
+            "median": 11.794041958637536,
+            "min": 11.75195793621242,
+            "max": 12.241999967955053
+          },
+          "prepareRename": {
+            "median": 0.6833329098299146,
+            "min": 0.22920803166925907,
+            "max": 0.7499998901039362
+          },
+          "rename": {
+            "median": 0.4752500681206584,
+            "min": 0.4480830393731594,
+            "max": 0.715959002263844
+          },
+          "completion": {
+            "median": 0.3708750009536743,
+            "min": 0.28250005561858416,
+            "max": 0.4552910104393959
+          },
+          "signatureHelp": {
+            "median": 0.26908295694738626,
+            "min": 0.21804100833833218,
+            "max": 0.39075000677257776
+          },
+          "documentSymbol": {
+            "median": 0.510042067617178,
+            "min": 0.23741694167256355,
+            "max": 0.5835839547216892
+          },
+          "documentHighlight": {
+            "median": 0.17754198051989079,
+            "min": 0.17320795450359583,
+            "max": 1.2024170719087124
+          },
+          "foldingRange": {
+            "median": 0.1876669703051448,
+            "min": 0.12720806989818811,
+            "max": 0.24133396800607443
+          },
+          "selectionRange": {
+            "median": 0.11383299715816975,
+            "min": 0.0980000477284193,
+            "max": 0.18524995539337397
+          },
+          "inlayHint": {
+            "median": 0.1674999948590994,
+            "min": 0.13816694263368845,
+            "max": 0.2582909073680639
+          },
+          "diagnostic": {
+            "median": 38.60416600946337,
+            "min": 35.64899996854365,
+            "max": 38.90883398707956
+          },
+          "workspaceSymbol": {
+            "median": 18.794041010551155,
+            "min": 18.135791993699968,
+            "max": 19.03941691853106
+          },
+          "codeAction": {
+            "median": 1.2408329639583826,
+            "min": 1.1882500257343054,
+            "max": 2.424041973426938
+          },
+          "completionResolve": {
+            "median": 0.3617500187829137,
+            "min": 0.3387909382581711,
+            "max": 0.44216704554855824
+          },
+          "diagnosticAfterEdits": {
+            "median": 35.30679107643664,
+            "min": 34.305542008951306,
+            "max": 40.325290989130735
+          }
+        },
+        "memory_growth_mib": {
+          "median": 65.171875,
+          "min": 64.765625,
+          "max": 69.109375
+        },
+        "exit_codes": [
+          0,
+          0,
+          0
+        ],
+        "implementations": [
+          {
+            "binary_sha256": "22a35e2ae56553145f46761a81cdb3c982920f21b7e6bf4323aa2a7f09f53ba7"
+          },
+          {
+            "binary_sha256": "22a35e2ae56553145f46761a81cdb3c982920f21b7e6bf4323aa2a7f09f53ba7"
+          },
+          {
+            "binary_sha256": "22a35e2ae56553145f46761a81cdb3c982920f21b7e6bf4323aa2a7f09f53ba7"
+          }
+        ],
+        "protocol_errors": {
+          "1": {},
+          "2": {},
+          "3": {}
+        }
+      }
+    }
+  },
+  "verification": {
+    "legacy": {
+      "checks": {
+        "initialize": true,
+        "utf16_negotiation": true,
+        "hover_documentation": true,
+        "cross_file_definition": true,
+        "rename_applied_edits": true,
+        "member_completion": true,
+        "completion_resolve": true,
+        "type_error": true,
+        "semantic_highlighting": true,
+        "signature_active_parameter": true,
+        "configured_inlay_hints": true,
+        "call_hierarchy": true,
+        "file_rename_import_edits": true,
+        "incremental_edit_clears_type_error": true,
+        "utf16_surrogate_edit": true,
+        "close_reopen": true,
+        "tsconfig_extends_precedence": false,
+        "arkui_grammar_and_sdk_globals": true,
+        "arkts_restriction_diagnostic": true,
+        "invalid_resource_diagnostic": true,
+        "resource_completion": true,
+        "resource_completion_applies": true,
+        "resource_completion_mid_string": false,
+        "system_resources": true,
+        "resource_definition": true,
+        "media_preview": true,
+        "two_way_binding_docs": true,
+        "document_links": false,
+        "resource_watch_reload": true,
+        "configuration_keeps_sdk": true,
+        "concurrent_requests_and_cancel": true
+      },
+      "passed": 28,
+      "total": 31,
+      "exit_code": 1
+    },
+    "native": {
+      "checks": {
+        "initialize": true,
+        "utf16_negotiation": true,
+        "hover_documentation": true,
+        "cross_file_definition": true,
+        "rename_applied_edits": true,
+        "member_completion": true,
+        "completion_resolve": true,
+        "type_error": true,
+        "semantic_highlighting": true,
+        "signature_active_parameter": true,
+        "configured_inlay_hints": true,
+        "call_hierarchy": true,
+        "file_rename_import_edits": true,
+        "incremental_edit_clears_type_error": true,
+        "utf16_surrogate_edit": true,
+        "close_reopen": true,
+        "tsconfig_extends_precedence": true,
+        "arkui_grammar_and_sdk_globals": true,
+        "arkts_restriction_diagnostic": true,
+        "invalid_resource_diagnostic": true,
+        "resource_completion": true,
+        "resource_completion_applies": true,
+        "resource_completion_mid_string": true,
+        "system_resources": true,
+        "resource_definition": true,
+        "media_preview": true,
+        "two_way_binding_docs": true,
+        "document_links": true,
+        "document_link_resolve": true,
+        "resource_watch_reload": true,
+        "configuration_keeps_sdk": true,
+        "concurrent_requests_and_cancel": true
+      },
+      "passed": 32,
+      "total": 32,
+      "exit_code": 0
+    }
+  },
+  "pressure": {
+    "legacy": {
+      "server": "legacy",
+      "implementation": {
+        "version": "1.3.10",
+        "wrapper_sha256": "7372b18b92cd63999e2ca5b7ab0f588774509bff2df420ae3e5bb65795ed302d"
+      },
+      "files": 102,
+      "requests": 100,
+      "edits": 2000,
+      "startup_ms": 383.42016690876335,
+      "latency_ms": {
+        "initialize": 379.450291977264,
+        "hover": 1058.7790419813246,
+        "definition": 3.507832996547222,
+        "typeDefinition": 1.7246250063180923,
+        "references": 52.26758308708668,
+        "prepareRename": 6.4282919047400355,
+        "rename": 797.641999903135,
+        "completion": 9.635332971811295,
+        "signatureHelp": 2.2727500181645155,
+        "documentSymbol": 3.0554579570889473,
+        "documentHighlight": 1.2842080323025584,
+        "foldingRange": 1.4206250198185444,
+        "selectionRange": 1.4845000114291906,
+        "inlayHint": 1.5163329662755132,
+        "diagnostic": 18.566083977930248,
+        "workspaceSymbol": 43.80458302330226,
+        "codeAction": 12.871667044237256,
+        "completionResolve": 2.5323749287053943,
+        "diagnosticAfterEdits": 143.22554098907858
+      },
+      "warm_hover": {
+        "median_ms": 0.4924999666400254,
+        "p95_ms": 0.899916049093008
+      },
+      "edit_hover": {
+        "median_ms": 42.94810397550464,
+        "p95_ms": 46.681375009939075
+      },
+      "idle_rss_mib": 697.875,
+      "after_edits_rss_mib": 2030.921875,
+      "peak_tree_rss_mib": 2031.71875,
+      "after_reopen_rss_mib": 2031.71875,
+      "exit_code": 1,
+      "process_time_seconds": {
+        "real": 91.51,
+        "user": 102.03,
+        "sys": 1.94
+      }
+    },
+    "native": {
+      "server": "native",
+      "implementation": {
+        "binary_sha256": "22a35e2ae56553145f46761a81cdb3c982920f21b7e6bf4323aa2a7f09f53ba7"
+      },
+      "files": 102,
+      "requests": 100,
+      "edits": 2000,
+      "startup_ms": 17.893208074383438,
+      "latency_ms": {
+        "initialize": 15.340958023443818,
+        "hover": 34.05987494625151,
+        "definition": 0.17233309336006641,
+        "typeDefinition": 0.1154579222202301,
+        "references": 1.735457917675376,
+        "prepareRename": 0.11600006837397814,
+        "rename": 0.20704197231680155,
+        "completion": 0.19591604359447956,
+        "signatureHelp": 0.15229207929223776,
+        "documentSymbol": 0.17245800700038671,
+        "documentHighlight": 0.13333302922546864,
+        "foldingRange": 0.12700003571808338,
+        "selectionRange": 0.09520899038761854,
+        "inlayHint": 0.09695801418274641,
+        "diagnostic": 27.008457924239337,
+        "workspaceSymbol": 16.673707985319197,
+        "codeAction": 0.9803749853745103,
+        "completionResolve": 0.22129202261567116,
+        "diagnosticAfterEdits": 24.48541601188481
+      },
+      "warm_hover": {
+        "median_ms": 0.10358350118622184,
+        "p95_ms": 0.15112501569092274
+      },
+      "edit_hover": {
+        "median_ms": 11.58604200463742,
+        "p95_ms": 12.478790944442153
+      },
+      "idle_rss_mib": 169.328125,
+      "after_edits_rss_mib": 218.609375,
+      "peak_tree_rss_mib": 218.609375,
+      "after_reopen_rss_mib": 199.859375,
+      "exit_code": 0,
+      "process_time_seconds": {
+        "real": 25.68,
+        "user": 23.53,
+        "sys": 1.56
+      }
+    }
+  }
+}
