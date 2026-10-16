@@ -3,3 +3,5 @@
 /.zed/
 /extension.wasm
 /grammars/
+/reports/raw/
+__pycache__/

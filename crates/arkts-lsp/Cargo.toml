@@ -1,0 +1,20 @@
+[package]
+name = "arkts-lsp"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Embeddable native ArkTS language server powered by tsrs"
+
+[dependencies]
+arkts-sdk = { path = "../arkts-sdk" }
+arkts-services = { path = "../arkts-services" }
+serde_json.workspace = true
+tsrs_core.workspace = true
+tsrs_lsp.workspace = true
+tsrs_ls.workspace = true
+tsrs_lsproto.workspace = true
+tsrs_vfs.workspace = true
+mimalloc-safe = { version = "0.1.67", features = ["no_thp"] }
+
+[dev-dependencies]
+tempfile = "3"
