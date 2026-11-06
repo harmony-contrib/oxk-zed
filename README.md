@@ -6,14 +6,14 @@ The Zed server IDs remain `arkts-language-server`, `oxk-formatter`, and `oxk-lin
 
 ## Build and install locally
 
-The native crates depend on local source trees:
+The native crates depend on the `ohos` branch of the ohos-rs forks:
 
-| Dependency | Path relative to this repository | Revision tested |
+| Dependency | Source | Revision (pinned in `Cargo.lock`) |
 | --- | --- | --- |
-| OXC | `../oxc` | `230deff13c3d0baddb9560ba895ee2b6a3fc4b7e` |
-| tsrs | `../../ohos-rs/tsrs` | `7308ab7f29516b3330d9d0dad4945b571b54772c` |
+| OXC | `https://github.com/ohos-rs/oxc` (`ohos`) | `6d42deb0af488a59c3d2ba06e01fc60d87b86355` |
+| tsrs | `https://github.com/ohos-rs/tsrs` (`ohos`) | `32f89d8779168460e8b45274aaaccce69b9d2f5e` |
 
-Rust 1.99.0 and the `wasm32-wasip2` target are specified in `rust-toolchain.toml`. With those checkouts available:
+`cargo update` refreshes both to the latest commits on `ohos`. Rust 1.99.0 and the `wasm32-wasip2` target are specified in `rust-toolchain.toml`. Cargo fetches the git sources automatically; build with:
 
 ```sh
 scripts/build-local.sh
@@ -101,7 +101,7 @@ Current boundaries: resource scope follows module directories and shared `AppSco
 | `arkts-lsp` | tsrs session, SDK filesystem, ArkTS additions | Native Rust; no Zed or Node |
 | `oxk-zed` | Zed WASM adapter and server discovery | Zed extension API |
 
-Other applications can use path dependencies. The local OXC/tsrs checkouts must remain available; these crates are not published to crates.io.
+Other applications can use the same git dependencies. The OXC/tsrs crates are not published to crates.io; they are pulled from the `ohos` branches of the ohos-rs forks.
 
 ```rust,no_run
 use std::{path::Path, sync::Arc};

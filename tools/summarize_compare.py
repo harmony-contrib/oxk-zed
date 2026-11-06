@@ -16,6 +16,14 @@ def output(command):
     return subprocess.check_output(command, cwd=ROOT, text=True).strip()
 
 
+def locked_commit(repository):
+    prefix = f'source = "git+{repository}?branch=ohos#'
+    for line in (ROOT / 'Cargo.lock').read_text().splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):].rstrip('"')
+    raise RuntimeError(f'{repository} is not locked in Cargo.lock')
+
+
 def median_range(values):
     return {'median': statistics.median(values), 'min': min(values), 'max': max(values)}
 
@@ -144,8 +152,8 @@ def main():
         'os': plistlib.loads(Path('/System/Library/CoreServices/SystemVersion.plist').read_bytes())['ProductVersion'],
         'architecture': platform.machine(), 'cpu': hardware['cpu'], 'physical_memory_gib': hardware['physical_memory_bytes'] / (1024 ** 3),
         'rust': output(['rustc', '--version']), 'node': output(['node', '--version']),
-        'oxc_commit': output(['git', '-C', '../oxc', 'rev-parse', 'HEAD']),
-        'tsrs_commit': output(['git', '-C', '../../ohos-rs/tsrs', 'rev-parse', 'HEAD']),
+        'oxc_commit': locked_commit('https://github.com/ohos-rs/oxc'),
+        'tsrs_commit': locked_commit('https://github.com/ohos-rs/tsrs'),
         'legacy_version': json.loads((ROOT / 'target/baseline/node_modules/@arkts/language-server/package.json').read_text())['version'],
         'native_sha256': hashlib.sha256((ROOT / 'target/tsrs/release/arkts-lsp').read_bytes()).hexdigest(),
         'wasm_sha256': hashlib.sha256((ROOT / 'extension.wasm').read_bytes()).hexdigest(),
