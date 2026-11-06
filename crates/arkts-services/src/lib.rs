@@ -37,7 +37,7 @@ struct Calls {
 impl<'a> Visit<'a> for Calls {
     fn visit_string_literal(&mut self, value: &StringLiteral<'a>) {
         self.strings.push(ResourceCall {
-            value: value.value.to_string(),
+            value: value.value.as_str().unwrap_or_default().to_string(),
             span: value.span,
         });
     }
@@ -45,7 +45,7 @@ impl<'a> Visit<'a> for Calls {
         if matches!(&call.callee, Expression::Identifier(id) if id.name == "$r") {
             if let Some(Argument::StringLiteral(value)) = call.arguments.first() {
                 self.resources.push(ResourceCall {
-                    value: value.value.to_string(),
+                    value: value.value.as_str().unwrap_or_default().to_string(),
                     span: value.span,
                 });
             }
@@ -139,10 +139,13 @@ impl<'a> Visit<'a> for SystemResources {
                     if let (Some(kind), Expression::ObjectExpression(values)) =
                         (property.key.static_name(), &property.value)
                     {
+                        let Some(kind) = kind.as_str() else { continue };
                         for value in &values.properties {
                             if let ObjectPropertyKind::ObjectProperty(value) = value {
                                 if let Some(name) = value.key.static_name() {
-                                    self.0.insert(format!("sys.{kind}.{name}"), ());
+                                    if let Some(name) = name.as_str() {
+                                        self.0.insert(format!("sys.{kind}.{name}"), ());
+                                    }
                                 }
                             }
                         }
