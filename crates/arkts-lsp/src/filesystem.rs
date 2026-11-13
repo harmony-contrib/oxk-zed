@@ -1,6 +1,7 @@
 use arkts_sdk::SdkConfig;
 use serde_json::{json, Value};
 use std::{
+    collections::BTreeSet,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
     time::SystemTime,
@@ -12,6 +13,7 @@ const SDK_BASE: &str = ".arkts-lsp-sdk.json";
 #[derive(Default)]
 struct Configuration {
     roots: Vec<PathBuf>,
+    open_files: BTreeSet<PathBuf>,
     sdk: SdkConfig,
     options: Value,
 }
@@ -67,6 +69,30 @@ impl SdkFileSystem {
         (state.options.clone(), state.roots.clone())
     }
 
+    pub(crate) fn set_open(&self, path: PathBuf, open: bool) -> Vec<PathBuf> {
+        let mut state = self.configuration.write().unwrap();
+        let changed = if open {
+            state.open_files.insert(path.clone())
+        } else {
+            state.open_files.remove(&path)
+        };
+        if !changed {
+            return Vec::new();
+        }
+        state
+            .roots
+            .iter()
+            .filter_map(|root| {
+                let config = root.join("tsconfig.json");
+                let name = config.to_str()?;
+                (path.starts_with(root)
+                    && !self.inner.file_exists(name)
+                    && self.is_virtual(name, &state))
+                .then_some(config)
+            })
+            .collect()
+    }
+
     fn is_virtual(&self, path: &str, state: &Configuration) -> bool {
         (!state
             .sdk
@@ -75,9 +101,12 @@ impl SdkFileSystem {
             .is_none_or(|o| o.is_empty())
             || !state.sdk.declarations.is_empty())
             && state.roots.iter().any(|root| {
-                ["tsconfig.json", SDK_BASE]
-                    .iter()
-                    .any(|name| root.join(name) == Path::new(path))
+                root.join(SDK_BASE) == Path::new(path)
+                    || (root.join("tsconfig.json") == Path::new(path)
+                        && !root
+                            .join("jsconfig.json")
+                            .to_str()
+                            .is_some_and(|name| self.inner.file_exists(name)))
             })
     }
 
@@ -162,7 +191,22 @@ impl FS for SdkFileSystem {
                 );
             }
             if self.is_virtual(path, &state) {
-                return state.sdk.adapt_tsconfig(&json!({"include":["**/*"],"exclude":["node_modules", "oh_modules", ".git", "build"]}).to_string(), &state.options).ok();
+                // Match inferred-project discovery: open documents and their imports, not an
+                // implicit **/* scan of every module/build/dependency in the workspace. Keep a
+                // virtual config solely to supply the SDK options and ambient declarations.
+                let root = Path::new(path).parent()?;
+                let files: Vec<_> = state
+                    .open_files
+                    .iter()
+                    .filter(|file| file.starts_with(root))
+                    .collect();
+                return state
+                    .sdk
+                    .adapt_tsconfig(
+                        &json!({"files":files,"include":[]}).to_string(),
+                        &state.options,
+                    )
+                    .ok();
             }
         }
         original.map(|text| {
@@ -224,6 +268,7 @@ impl FS for SdkFileSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn virtual_config_is_visible_and_never_written() {
         let dir = tempfile::tempdir().unwrap();
@@ -248,6 +293,28 @@ mod tests {
         assert!(!path.exists());
         fs.configure(json!({}), None).unwrap();
         assert!(!fs.file_exists(name));
+    }
+    #[test]
+    fn virtual_project_does_not_shadow_jsconfig_or_change_explicit_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("jsconfig.json");
+        std::fs::write(
+            &config,
+            r#"{"include":["src/**/*"],"exclude":["src/generated"]}"#,
+        )
+        .unwrap();
+        let fs = SdkFileSystem::new(Arc::new(tsrs_vfs::osvfs::fs()), dir.path().into());
+        fs.configure(
+            json!({"compilerOptions":{"strict":true}}),
+            Some(vec![dir.path().into()]),
+        )
+        .unwrap();
+        assert!(!fs.file_exists(dir.path().join("tsconfig.json").to_str().unwrap()));
+        assert!(fs.set_open(dir.path().join("src/main.ts"), true).is_empty());
+        let adapted: Value =
+            serde_json::from_str(&fs.read_file(config.to_str().unwrap()).unwrap()).unwrap();
+        assert_eq!(adapted["include"], json!(["src/**/*"]));
+        assert_eq!(adapted["exclude"], json!(["src/generated"]));
     }
     #[test]
     fn project_inheritance_is_above_sdk_defaults() {
