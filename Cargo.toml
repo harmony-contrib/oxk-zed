@@ -33,6 +33,7 @@ tsrs_core = { git = "https://github.com/ohos-rs/tsrs", branch = "ohos" }
 tsrs_lsp = { git = "https://github.com/ohos-rs/tsrs", branch = "ohos" }
 tsrs_ls = { git = "https://github.com/ohos-rs/tsrs", branch = "ohos" }
 tsrs_lsproto = { git = "https://github.com/ohos-rs/tsrs", branch = "ohos" }
+tsrs_project = { git = "https://github.com/ohos-rs/tsrs", branch = "ohos" }
 tsrs_vfs = { git = "https://github.com/ohos-rs/tsrs", branch = "ohos" }
 
 [profile.release]

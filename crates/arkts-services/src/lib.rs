@@ -98,6 +98,59 @@ impl Document {
         }
         Cow::Owned(text)
     }
+
+    /// Adapt edits only when either version contains a normalized binding. Ordinary edits
+    /// can pass through unchanged; binding edits replace just the changed compiler span,
+    /// so a slow consumer does not queue a full document for each keystroke.
+    pub fn compiler_change(&self, previous: &Self) -> Option<Value> {
+        if self.bindings.is_empty() && previous.bindings.is_empty() {
+            return None;
+        }
+        let before = previous.tsrs_text();
+        let after = self.tsrs_text();
+        let mut start = before
+            .bytes()
+            .zip(after.bytes())
+            .take_while(|(a, b)| a == b)
+            .count();
+        while !before.is_char_boundary(start) {
+            start -= 1;
+        }
+        // An LSP position must not fall between CR and LF.
+        if start > 0
+            && before.as_bytes()[start - 1] == b'\r'
+            && (before.as_bytes().get(start) == Some(&b'\n')
+                || after.as_bytes().get(start) == Some(&b'\n'))
+        {
+            start -= 1;
+        }
+        let mut suffix = before[start..]
+            .bytes()
+            .rev()
+            .zip(after[start..].bytes().rev())
+            .take_while(|(a, b)| a == b)
+            .count();
+        while !before.is_char_boundary(before.len() - suffix)
+            || !after.is_char_boundary(after.len() - suffix)
+        {
+            suffix -= 1;
+        }
+        if suffix > 0
+            && [&*before, &*after].iter().any(|text| {
+                let end = text.len() - suffix;
+                end > 0 && text.as_bytes()[end - 1] == b'\r' && text.as_bytes()[end] == b'\n'
+            })
+        {
+            suffix -= 1;
+        }
+        Some(json!({
+            "range": {
+                "start": position_at(&before, start),
+                "end": position_at(&before, before.len() - suffix)
+            },
+            "text": &after[start..after.len() - suffix]
+        }))
+    }
     pub fn resource_at(&self, position: &Value) -> Option<&ResourceCall> {
         let offset = offset_at(&self.text, position)?;
         self.resource_calls
@@ -481,6 +534,37 @@ impl ResourceIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compiler_changes_preserve_binding_transitions_unicode_and_line_endings() {
+        let cases = [
+            ("Text($$this.value);", "Text($$this.other);"),
+            ("Text($$this.value);", "Text(this.value);"),
+            ("Text(this.value);", "Text($$this.value);"),
+            ("Text($$this.value);", "// Text($$this.value);"),
+            ("// Text($$this.value);", "Text($$this.value);"),
+            ("'🦀'; Text($$this.value);", "'🦁'; Text($$this.value);"),
+            ("'🦀';\r\nText($$this.value);", "'🦀';\nText($$this.value);"),
+            ("'🦀';\nText($$this.value);", "'🦀';\r\nText($$this.value);"),
+            ("Text($$this.value);\r\n", "Text($$this.value);\r\n\r\n"),
+            ("Text($$this.value);", "Text($$this.value);"),
+            ("Text($$this.value);", ""),
+            ("", "Text($$this.value);"),
+        ];
+        for (before, after) in cases {
+            let previous = Document::parse(before.into());
+            let current = Document::parse(after.into());
+            let change = current.compiler_change(&previous).unwrap();
+            let mut actual = previous.tsrs_text().into_owned();
+            let start = offset_at(&actual, &change["range"]["start"]).unwrap();
+            let end = offset_at(&actual, &change["range"]["end"]).unwrap();
+            actual.replace_range(start..end, change["text"].as_str().unwrap());
+            assert_eq!(actual, current.tsrs_text(), "{before:?} -> {after:?}");
+        }
+        let plain = Document::parse("const value = 1;".into());
+        assert!(plain.compiler_change(&plain).is_none());
+    }
+
     #[test]
     fn syntax_excludes_comments_and_property_calls_and_handles_unicode() {
         let doc = Document::parse("// $r('fake')\nconst emoji = '🦀'; const a = $r('app.string.name'); obj.$r('ignored'); Text($$this.value);".into());

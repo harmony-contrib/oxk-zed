@@ -116,8 +116,36 @@ impl<R: Read> SdkReader<R> {
                 self.fs.configure(options, Some(roots.clone()))?;
                 self.state.lock().unwrap().set_roots(roots);
             }
+            Some("textDocument/didOpen" | "textDocument/didClose") => {
+                if let Some(uri) = message
+                    .pointer("/params/textDocument/uri")
+                    .and_then(Value::as_str)
+                {
+                    let configs = self
+                        .fs
+                        .set_open(uri_path(uri), message["method"] == "textDocument/didOpen");
+                    if !configs.is_empty() {
+                        let changes: Vec<_> = configs.iter().map(|path| json!({
+                            "uri": tsrs_ls::lsconv::file_name_to_document_uri(path.to_str().unwrap()).0, "type":2
+                        })).collect();
+                        // The next dispatch invalidates cached virtual root membership before
+                        // subsequent requests; imported files are still resolved by tsrs normally.
+                        self.pending.push_back(serde_json::to_vec(&json!({"jsonrpc":"2.0",
+                            "method":"workspace/didChangeWatchedFiles","params":{"changes":changes}
+                        })).unwrap());
+                    }
+                }
+            }
             _ => {}
         }
+        let previous = if message["method"] == "textDocument/didChange" {
+            message
+                .pointer("/params/textDocument/uri")
+                .and_then(Value::as_str)
+                .and_then(|uri| self.state.lock().unwrap().document(uri))
+        } else {
+            None
+        };
         self.state.lock().unwrap().observe(message)?;
         if let Some("textDocument/didOpen" | "textDocument/didChange") = message["method"].as_str()
         {
@@ -125,11 +153,14 @@ impl<R: Read> SdkReader<R> {
                 .pointer("/params/textDocument/uri")
                 .and_then(Value::as_str)
             {
-                if let Some(text) = self.state.lock().unwrap().compiler_text(uri) {
+                if let Some(document) = self.state.lock().unwrap().document(uri) {
                     if message["method"] == "textDocument/didOpen" {
-                        message["params"]["textDocument"]["text"] = json!(text);
-                    } else {
-                        message["params"]["contentChanges"] = json!([{"text":text}]);
+                        message["params"]["textDocument"]["text"] = json!(document.tsrs_text());
+                    } else if let Some(change) = previous
+                        .as_deref()
+                        .and_then(|previous| document.compiler_change(previous))
+                    {
+                        message["params"]["contentChanges"] = json!([change]);
                     }
                 }
             }
@@ -187,6 +218,83 @@ impl<R: Read + Send> Reader for SdkReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn reader() -> SdkReader<std::io::Cursor<Vec<u8>>> {
+        SdkReader::new(
+            std::io::Cursor::new(Vec::new()),
+            Arc::new(SdkFileSystem::new(
+                Arc::new(tsrs_vfs::osvfs::fs()),
+                PathBuf::from("/"),
+            )),
+            Arc::new(Mutex::new(crate::middleware::HostState::default())),
+        )
+    }
+
+    #[test]
+    fn incremental_edits_do_not_queue_full_document_copies() {
+        for binding in ["", "Text($$this.value);\n"] {
+            let mut reader = reader();
+            let text = format!("const value = 0;\n//{}\n{binding}", "x".repeat(1024 * 1024));
+            reader
+                .adapt(&mut json!({"method":"textDocument/didOpen","params":{
+                    "textDocument":{"uri":"file:///large.ets","text":text}
+                }}))
+                .unwrap();
+            let mut queued_bytes = 0;
+            for version in 2..=17 {
+                let mut edit = json!({"method":"textDocument/didChange","params":{
+                    "textDocument":{"uri":"file:///large.ets","version":version},
+                    "contentChanges":[{"range":{"start":{"line":0,"character":14},
+                        "end":{"line":0,"character":15}},"text":(version % 10).to_string()}]
+                }});
+                reader.adapt(&mut edit).unwrap();
+                queued_bytes += serde_json::to_vec(&edit).unwrap().len();
+            }
+            assert!(
+                queued_bytes < 16 * 1024,
+                "16 one-character edits queued {queued_bytes} bytes"
+            );
+            eprintln!(
+                "binding={}: 16 edits queued {queued_bytes} bytes",
+                !binding.is_empty()
+            );
+        }
+    }
+
+    #[test]
+    fn sequential_edits_normalize_the_final_binding_view() {
+        let mut reader = reader();
+        reader
+            .adapt(&mut json!({"method":"textDocument/didOpen","params":{
+                "textDocument":{"uri":"file:///a.ets","text":"Text(this.value);"}
+            }}))
+            .unwrap();
+        let mut change = json!({"method":"textDocument/didChange","params":{
+            "textDocument":{"uri":"file:///a.ets","version":2},"contentChanges":[
+                {"range":{"start":{"line":0,"character":5},"end":{"line":0,"character":5}},"text":"$$"},
+                {"range":{"start":{"line":0,"character":12},"end":{"line":0,"character":17}},"text":"other"}
+            ]
+        }});
+        reader.adapt(&mut change).unwrap();
+        let mut compiler = "Text(this.value);".to_string();
+        for edit in change["params"]["contentChanges"].as_array().unwrap() {
+            let start = arkts_services::offset_at(&compiler, &edit["range"]["start"]).unwrap();
+            let end = arkts_services::offset_at(&compiler, &edit["range"]["end"]).unwrap();
+            compiler.replace_range(start..end, edit["text"].as_str().unwrap());
+        }
+        assert_eq!(compiler, "Text(  this.other);");
+        assert_eq!(
+            reader
+                .state
+                .lock()
+                .unwrap()
+                .document("file:///a.ets")
+                .unwrap()
+                .text,
+            "Text($$this.other);"
+        );
+    }
+
     #[test]
     fn invalid_sdk_preserves_initialize_request_id() {
         let bytes = serde_json::to_vec(
