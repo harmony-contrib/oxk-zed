@@ -5,3 +5,5 @@
 /grammars/
 /reports/raw/
 __pycache__/
+
+/.cache/

@@ -92,6 +92,18 @@ Resource completion uses an explicit replacement, including inside an existing n
 
 Current boundaries: resource scope follows module directories and shared `AppScope`; complex build-profile product/target filtering and dependency HAR resources under `oh_modules` are not implemented. This extension registers ArkTS, not JSON permission-manifest editing. Diagnostic text can differ from the old localized TypeScript implementation. See the [comparison report](reports/lsp-comparison.md).
 
+## File icon theme
+
+The extension bundles **OXK Symbols**, a Zed icon theme built from [Symbols](https://github.com/miguelsolorio/vscode-symbols) by Miguel Solorio (MIT). Select it as the icon theme:
+
+```json
+{
+  "icon_theme": "OXK Symbols"
+}
+```
+
+`file_finder.file_icons` must stay enabled (the default). Zed resolves language-picker icons from the active icon theme using the language's file suffix, so `.ets` gets the bundled ArkTS icon only while this theme is selected. The theme also adds HarmonyOS file/folder associations and keeps the rest of the Symbols artwork. Regenerate it with `node scripts/build-icon-theme.mjs`; see [icon_themes/README.md](icon_themes/README.md).
+
 ## Reuse the crates
 
 | Crate | Responsibility | Dependencies |
@@ -143,4 +155,4 @@ The macOS benchmark uses `/usr/bin/time -l` and 50 ms process-tree RSS sampling.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The bundled icon artwork is from [Symbols](https://github.com/miguelsolorio/vscode-symbols), also MIT; see [icon_themes/symbols/LICENSE](icon_themes/symbols/LICENSE).
