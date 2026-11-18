@@ -362,4 +362,46 @@ mod tests {
         std::fs::write(&config, "null").unwrap();
         assert_eq!(fs.read_file(config.to_str().unwrap()).unwrap(), "null");
     }
+    #[test]
+    fn virtual_config_keeps_one_component_declaration_and_loader_globals() {
+        let sdk = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../arkts-sdk/tests/fixtures/sdk-duplicate-declarations");
+        let workspace = tempfile::tempdir().unwrap();
+        let fs = SdkFileSystem::new(Arc::new(tsrs_vfs::osvfs::fs()), workspace.path().into());
+        fs.configure(
+            json!({"ets":{"sdkPath":sdk.to_string_lossy().to_string()}}),
+            Some(vec![workspace.path().into()]),
+        )
+        .unwrap();
+        fs.set_open(workspace.path().join("Index.ets"), true);
+        let config = workspace.path().join("tsconfig.json");
+        let adapted: Value = serde_json::from_str(
+            &fs.read_file(config.to_str().unwrap())
+                .expect("virtual tsconfig"),
+        )
+        .unwrap();
+        let files = adapted["files"].as_array().expect("files");
+        let normalize = |path: &Path| path.to_string_lossy().replace('\\', "/");
+        let component_button = normalize(&sdk.join("ets/component/button.d.ts"));
+        let loader = sdk.join("ets/build-tools/ets-loader/declarations");
+        let loader_button = normalize(&loader.join("button.d.ts"));
+        let loader_global = normalize(&loader.join("global.d.ts"));
+        let loader_feature = normalize(&loader.join("featureability.d.ts"));
+        assert_eq!(files.len(), 4, "{files:?}");
+        assert!(files.iter().any(|file| file
+            .as_str()
+            .is_some_and(|path| path.ends_with("Index.ets"))));
+        assert!(files
+            .iter()
+            .any(|file| file.as_str() == Some(component_button.as_str())));
+        assert!(!files
+            .iter()
+            .any(|file| file.as_str() == Some(loader_button.as_str())));
+        assert!(files
+            .iter()
+            .any(|file| file.as_str() == Some(loader_global.as_str())));
+        assert!(files
+            .iter()
+            .any(|file| file.as_str() == Some(loader_feature.as_str())));
+    }
 }
