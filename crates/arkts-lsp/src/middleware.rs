@@ -409,7 +409,7 @@ impl<W: Write> SdkWriter<W> {
         if file.text() != document.tsrs_text().as_ref() {
             return None;
         }
-        let project_id = project.id_string();
+        let project_id = project.id().0;
         let program_version = project.program_last_update;
         if let Some(cached) = self.state.lock().unwrap().arkts_diagnostics.get(uri) {
             if cached.project_id == project_id && cached.program_version == program_version {
@@ -437,8 +437,7 @@ impl<W: Write> SdkWriter<W> {
         );
         let mut items = Vec::new();
         for diagnostic in program.get_arkts_linter_diagnostics(&ctx, Some(file)) {
-            let diagnostic =
-                tsrs_ls::lsconv::diagnostic_to_lsp_pull(&ctx, &converters, diagnostic, false);
+            let diagnostic = tsrs_ls::lsconv::diagnostic_to_lsp_push(&ctx, &converters, diagnostic);
             let text = tsrs_lsproto::marshal(&diagnostic).ok()?;
             let mut value: Value = serde_json::from_str(&text).ok()?;
             value["source"] = json!("arkts-linter");
@@ -544,6 +543,8 @@ mod tests {
                 client: None,
                 logger: None,
                 npm_executor: None,
+                spawner: None,
+                content_mapper_logger: None,
                 parse_cache: None,
                 content_mapped_parse_cache: None,
             });
@@ -576,7 +577,7 @@ mod tests {
                 .iter()
                 .map(|path| tsrs_lsproto::FileEvent {
                     uri: tsrs_ls::lsconv::file_name_to_document_uri(path.to_str().unwrap()),
-                    type_: tsrs_lsproto::FileChangeType::Changed,
+                    type_: tsrs_lsproto::FileChangeType::CHANGED,
                 })
                 .collect();
             self.session.did_change_watched_files(&self.ctx, &events);

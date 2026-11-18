@@ -43,6 +43,7 @@ where
         typings_location: String::new(),
         parse_cache: None,
         npm_install: None,
+        spawn: None,
         progress_delay: Duration::from_millis(250),
         set_parent_process_id: None,
     });

@@ -14,7 +14,7 @@ The extension is installed as a Zed dev extension from this checkout.
 
 ### Prerequisites
 
-- Rust 1.99.0 with the `wasm32-wasip2` target. `rust-toolchain.toml` pins both.
+- Rust 1.100.0 with the `wasm32-wasip2` target. `rust-toolchain.toml` pins both; tsrs requires Rust 1.100 or newer.
 - An OpenHarmony or HarmonyOS SDK for ArkUI globals and system resources. Plain TypeScript/ETS editing works without one.
 - `bash` for `scripts/build-local.sh` (macOS/Linux). Zed's bundled Node runs the formatter and linter launchers.
 

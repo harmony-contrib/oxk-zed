@@ -14,7 +14,7 @@ zed_extension_api = "0.7.0"
 arkts-sdk = { path = "crates/arkts-sdk" }
 
 [dev-dependencies]
-wasmparser = "0.227.1"
+wasmparser = "0.263.0"
 
 [workspace]
 members = [".", "crates/arkts-sdk", "crates/arkts-services", "crates/arkts-lsp"]
