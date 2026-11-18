@@ -9,7 +9,7 @@ icon_themes = ["icon_themes/oxk-symbols.json"]
 
 [grammars.arkts]
 repository = "https://github.com/harmony-contrib/tree-sitter-arkts"
-rev = "3a6dd89c121c9ace24cc3642d62985d083145941"
+rev = "9a97c1e6ac93bc07732c15050a0e560bc63c8d78"
 
 [language_servers.arkts-language-server]
 name = "ArkTS Language Server (tsrs)"

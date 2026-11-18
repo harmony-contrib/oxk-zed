@@ -207,7 +207,7 @@ impl<R: Read + Send> Reader for SdkReader<R> {
                 // Preserve the request ID so tsrs sends a correlated InvalidParams response.
                 tsrs_lsproto::unmarshal(&bytes).ok(),
                 Some(Error::wrap_code(
-                    ErrorCode::InvalidParams,
+                    ErrorCode::INVALID_PARAMS,
                     Error::new(error),
                 )),
             ),
@@ -318,7 +318,7 @@ mod tests {
             Arc::new(Mutex::new(crate::middleware::HostState::default())),
         );
         let (message, error) = reader.read();
-        assert!(error.unwrap().is_code(ErrorCode::InvalidParams));
+        assert!(error.unwrap().is_code(ErrorCode::INVALID_PARAMS));
         let value: Value =
             serde_json::from_str(&tsrs_lsproto::marshal(&message.unwrap()).unwrap()).unwrap();
         assert_eq!(value["id"], 123);

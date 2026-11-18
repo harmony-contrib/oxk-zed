@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for payload in Parser::new(0).parse_all(&bytes) {
         if let Payload::ComponentExportSection(section) = payload? {
             for export in section {
-                exports.insert(export?.name.0.to_string());
+                exports.insert(export?.name.name.to_string());
             }
         }
     }

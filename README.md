@@ -14,7 +14,7 @@ The extension is installed as a Zed dev extension from this checkout.
 
 ### Prerequisites
 
-- Rust 1.99.0 with the `wasm32-wasip2` target. `rust-toolchain.toml` pins both.
+- Rust 1.100.0 with the `wasm32-wasip2` target. `rust-toolchain.toml` pins both; tsrs requires Rust 1.100 or newer.
 - An OpenHarmony or HarmonyOS SDK for ArkUI globals and system resources. Plain TypeScript/ETS editing works without one.
 - `bash` for `scripts/build-local.sh` (macOS/Linux). Zed's bundled Node runs the formatter and linter launchers.
 
@@ -139,8 +139,8 @@ Other applications can use the same git dependencies. The OXC/tsrs crates are no
 
 | Dependency | Source | Revision |
 | --- | --- | --- |
-| OXC | `https://github.com/ohos-rs/oxc` (`ohos`) | `6d42deb0af488a59c3d2ba06e01fc60d87b86355` |
-| tsrs | `https://github.com/ohos-rs/tsrs` (`ohos`) | `32f89d8779168460e8b45274aaaccce69b9d2f5e` |
+| OXC | `https://github.com/ohos-rs/oxc` (`ohos`) | `1526b2c932d211c25d85dd172018889d0aeda776` |
+| tsrs | `https://github.com/ohos-rs/tsrs` (`ohos`) | `fd5328b12436fdc044724fcfe1cb8896351cd46a` |
 
 `cargo update` refreshes both to the latest commits on `ohos`.
 
