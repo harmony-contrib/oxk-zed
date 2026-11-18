@@ -1,6 +1,7 @@
 //! SDK configuration shared by Zed and native language-service hosts.
 use serde_json::{json, Map, Value};
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -117,6 +118,11 @@ fn absolute(root: &Path, value: &str) -> PathBuf {
     }
 }
 
+fn is_declaration(path: &Path) -> bool {
+    path.to_str()
+        .is_some_and(|s| s.ends_with(".d.ts") || s.ends_with(".d.ets"))
+}
+
 fn declarations(root: &Path, result: &mut Vec<String>) -> Result<(), String> {
     if !root.is_dir() {
         return Ok(());
@@ -132,12 +138,43 @@ fn declarations(root: &Path, result: &mut Vec<String>) -> Result<(), String> {
         // Do not follow directory symlinks: SDK links can point back to an ancestor.
         if kind.is_dir() {
             declarations(&path, result)?;
-        } else if path.is_file()
-            && path
-                .to_str()
-                .is_some_and(|s| s.ends_with(".d.ts") || s.ends_with(".d.ets"))
-        {
+        } else if path.is_file() && is_declaration(&path) {
             result.push(path.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    Ok(())
+}
+
+/// Collects declarations keyed by their path relative to `root`.
+///
+/// The first root wins on conflicts. SDK layouts contain the same component
+/// declarations under both `ets/component` and the ets-loader declarations
+/// directory; preferring the component copy keeps one declaration per
+/// component while the loader still contributes its unique globals.
+fn declarations_by_relative_path(
+    root: &Path,
+    relative: &Path,
+    result: &mut BTreeMap<String, String>,
+) -> Result<(), String> {
+    if !root.is_dir() {
+        return Ok(());
+    }
+    let mut entries = fs::read_dir(root)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let kind = entry.file_type().map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let relative_path = relative.join(entry.file_name());
+        // Do not follow directory symlinks: SDK links can point back to an ancestor.
+        if kind.is_dir() {
+            declarations_by_relative_path(&path, &relative_path, result)?;
+        } else if path.is_file() && is_declaration(&path) {
+            result
+                .entry(relative_path.to_string_lossy().replace('\\', "/"))
+                .or_insert_with(|| path.to_string_lossy().replace('\\', "/"));
         }
     }
     Ok(())
@@ -222,8 +259,18 @@ impl SdkConfig {
                 config.compiler_options["ets"]["syntaxComponents"] = json!({"paramsUICallback": ["ForEach", "LazyForEach"],
                     "attrUICallback": [{"name": "Repeat", "attributes": ["each", "template"]}]});
             }
-            declarations(&ets.join("component"), &mut config.declarations)?;
-            declarations(&loader.join("declarations"), &mut config.declarations)?;
+            let mut sdk_declarations = BTreeMap::new();
+            declarations_by_relative_path(
+                &ets.join("component"),
+                Path::new(""),
+                &mut sdk_declarations,
+            )?;
+            declarations_by_relative_path(
+                &loader.join("declarations"),
+                Path::new(""),
+                &mut sdk_declarations,
+            )?;
+            config.declarations.extend(sdk_declarations.into_values());
             config.sdk_root = Some(sdk);
         }
         if let Some(hms) = options
@@ -390,6 +437,56 @@ mod tests {
         assert_eq!(adapted["files"].as_array().unwrap().len(), 1);
         assert_eq!(adapted["include"][0], "**/*");
         assert!(!dir.path().join("tsconfig.json").exists());
+    }
+    #[test]
+    fn sdk_declarations_prefer_component_and_keep_loader_only_globals() {
+        let root =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sdk-duplicate-declarations");
+        let sdk = SdkConfig::load(
+            &json!({"ets":{"sdkPath":root.to_string_lossy().to_string()}}),
+            &root,
+        )
+        .unwrap();
+        let normalize = |path: PathBuf| path.to_string_lossy().replace('\\', "/");
+        let component_button = normalize(root.join("ets/component/button.d.ts"));
+        let loader = root.join("ets/build-tools/ets-loader/declarations");
+        assert_eq!(sdk.declarations.len(), 3, "{:?}", sdk.declarations);
+        assert!(sdk.declarations.contains(&component_button));
+        assert!(!sdk
+            .declarations
+            .contains(&normalize(loader.join("button.d.ts"))));
+        assert!(sdk
+            .declarations
+            .contains(&normalize(loader.join("global.d.ts"))));
+        assert!(sdk
+            .declarations
+            .contains(&normalize(loader.join("featureability.d.ts"))));
+
+        let adapted: Value =
+            serde_json::from_str(&sdk.adapt_tsconfig("{}", &json!({})).unwrap()).unwrap();
+        let files = adapted["files"].as_array().expect("files");
+        assert_eq!(files.len(), 3);
+        assert!(files
+            .iter()
+            .any(|file| file.as_str() == Some(&component_button)));
+        assert!(files.iter().any(|file| file
+            .as_str()
+            .is_some_and(|file| file.ends_with("global.d.ts"))));
+    }
+    #[test]
+    fn sdk_declarations_fall_back_to_loader_when_component_is_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let loader = dir.path().join("ets/build-tools/ets-loader");
+        fs::create_dir_all(loader.join("declarations")).unwrap();
+        fs::write(loader.join("tsconfig.json"), "{}").unwrap();
+        fs::write(
+            loader.join("declarations/global.d.ts"),
+            "declare const sdkGlobal: string;",
+        )
+        .unwrap();
+        let sdk = SdkConfig::load(&json!({"ets":{"sdkPath":dir.path()}}), dir.path()).unwrap();
+        assert_eq!(sdk.declarations.len(), 1);
+        assert!(sdk.declarations[0].ends_with("declarations/global.d.ts"));
     }
     #[test]
     fn bad_sdk_is_an_error() {
