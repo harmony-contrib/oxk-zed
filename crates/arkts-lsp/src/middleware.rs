@@ -222,7 +222,11 @@ impl HostState {
         match request["method"].as_str()? {
             "textDocument/hover" => document.binding_hover(pos, self.chinese).or_else(|| {
                 self.resources
-                    .media_hover(document, pos, &source, self.chinese)
+                    .system_hover(document, pos, self.chinese)
+                    .or_else(|| {
+                        self.resources
+                            .media_hover(document, pos, &source, self.chinese)
+                    })
             }),
             "textDocument/completion" => self.resources.completions(document, pos, &source),
             "textDocument/definition" => {
@@ -236,7 +240,11 @@ impl HostState {
 }
 
 fn file_uri(path: &Path) -> String {
-    tsrs_ls::lsconv::file_name_to_document_uri(&path.to_string_lossy()).0
+    let name = path.to_string_lossy();
+    // The URI converter splits on `/`; normalize the Windows separator first.
+    #[cfg(windows)]
+    let name = name.replace('\\', "/");
+    tsrs_ls::lsconv::file_name_to_document_uri(&name).0
 }
 
 pub(crate) struct SdkWriter<W: Write> {

@@ -6,7 +6,7 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
-use oxc_span::{SourceType, Span};
+use oxc_span::{GetSpan, SourceType, Span};
 use serde_json::{json, Value};
 use std::{
     borrow::Cow,
@@ -182,8 +182,10 @@ impl Document {
     }
 }
 
+/// Entries of one `sysResource.js` assignment. Spans point at the property keys so
+/// definitions can open the exact line instead of the top of the generated file.
 #[derive(Default)]
-struct SystemResources(BTreeMap<String, ()>);
+struct SystemResources(Vec<(String, Span, String)>);
 impl<'a> Visit<'a> for SystemResources {
     fn visit_assignment_expression(&mut self, assignment: &AssignmentExpression<'a>) {
         if let Expression::ObjectExpression(object) = &assignment.right {
@@ -197,7 +199,20 @@ impl<'a> Visit<'a> for SystemResources {
                             if let ObjectPropertyKind::ObjectProperty(value) = value {
                                 if let Some(name) = value.key.static_name() {
                                     if let Some(name) = name.as_str() {
-                                        self.0.insert(format!("sys.{kind}.{name}"), ());
+                                        let id = match &value.value {
+                                            Expression::NumericLiteral(number) => {
+                                                number.raw.as_ref().map_or_else(
+                                                    || number.value.to_string(),
+                                                    ToString::to_string,
+                                                )
+                                            }
+                                            _ => String::new(),
+                                        };
+                                        self.0.push((
+                                            format!("sys.{kind}.{name}"),
+                                            value.key.span(),
+                                            id,
+                                        ));
                                     }
                                 }
                             }
@@ -256,12 +271,75 @@ pub struct Resource {
     pub qualifiers: String,
 }
 
+#[derive(Clone, Debug)]
+struct SystemResource {
+    file: usize,
+    id: String,
+    selection: Value,
+}
+
 #[derive(Default)]
 pub struct ResourceIndex {
     resources: Vec<Resource>,
-    system: BTreeMap<String, ()>,
-    system_path: Option<PathBuf>,
+    system: BTreeMap<String, SystemResource>,
+    /// Concrete previewer values per resource id and qualifier (`base`, `dark`, locales).
+    system_values: BTreeMap<String, BTreeMap<String, String>>,
+    system_paths: Vec<PathBuf>,
     roots: Vec<PathBuf>,
+}
+
+/// The SDK ships generated resource tables. Parse them with OXC instead of executing
+/// SDK JavaScript, keeping name spans for definitions and the id for hover.
+fn load_system_file(path: &Path, index: &mut ResourceIndex) {
+    let Ok(text) = fs::read_to_string(path) else {
+        return;
+    };
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, &text, SourceType::cjs()).parse();
+    let mut resources = SystemResources::default();
+    resources.visit_program(&parsed.program);
+    let file = index.system_paths.len();
+    index.system_paths.push(path.to_path_buf());
+    for (label, span, id) in resources.0 {
+        index.system.entry(label).or_insert(SystemResource {
+            file,
+            id,
+            selection: range(&text, span),
+        });
+    }
+}
+
+/// `sysResource.js` only maps names to ids. The previewer ships the concrete values
+/// per qualifier directory; index them for hover and for `$type:<id>` resolution.
+fn load_system_values(path: &Path, index: &mut ResourceIndex) {
+    let Ok(text) = fs::read_to_string(path) else {
+        return;
+    };
+    let mut qualifier = String::new();
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("id:") {
+            let Some((id, rest)) = rest.split_once(", '") else {
+                continue;
+            };
+            let Some((value, name)) = rest.rsplit_once("' '") else {
+                continue;
+            };
+            let Some(name) = name.strip_suffix('\'') else {
+                continue;
+            };
+            if name.is_empty() {
+                continue;
+            }
+            index
+                .system_values
+                .entry(id.to_string())
+                .or_default()
+                .insert(qualifier.clone(), value.to_string());
+        } else if !line.starts_with("keyconfig") && !line.contains('\'') {
+            // Values may span lines; continuation lines contain quotes and stay in qualifier.
+            qualifier = line.to_string();
+        }
+    }
 }
 
 fn walk_files(path: &Path, files: &mut Vec<PathBuf>) {
@@ -296,21 +374,44 @@ impl ResourceIndex {
         };
         if let Some(sdk) = options.pointer("/ets/sdkPath").and_then(Value::as_str) {
             let sdk = Path::new(sdk);
-            let ets = if sdk.file_name().is_some_and(|n| n == "ets") {
+            let ends_with_ets = sdk.file_name().is_some_and(|n| n == "ets");
+            let ets = if ends_with_ets {
                 sdk.to_path_buf()
             } else {
                 sdk.join("ets")
             };
-            let path = ets.join("build-tools/ets-loader/sysResource.js");
-            if let Ok(text) = fs::read_to_string(&path) {
-                // Parse the CommonJS data assignment with OXC, without executing SDK JavaScript.
-                let allocator = Allocator::default();
-                let parsed = Parser::new(&allocator, &text, SourceType::cjs()).parse();
-                let mut resources = SystemResources::default();
-                resources.visit_program(&parsed.program);
-                index.system = resources.0;
-            }
-            index.system_path = Some(path);
+            let root = if ends_with_ets {
+                sdk.parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or(sdk)
+            } else {
+                sdk
+            };
+            load_system_file(
+                &ets.join("build-tools")
+                    .join("ets-loader")
+                    .join("sysResource.js"),
+                &mut index,
+            );
+            load_system_values(
+                &root
+                    .join("previewer")
+                    .join("common")
+                    .join("resources")
+                    .join("entry")
+                    .join("resources.txt"),
+                &mut index,
+            );
+        }
+        // HMS resources share the `sys.` namespace but live outside ets-loader.
+        if let Some(hms) = options.pointer("/ets/hmsPath").and_then(Value::as_str) {
+            let hms = Path::new(hms);
+            let ets = if hms.file_name().is_some_and(|n| n == "ets") {
+                hms.to_path_buf()
+            } else {
+                hms.join("ets")
+            };
+            load_system_file(&ets.join("sysResource.js"), &mut index);
         }
         for root in roots {
             let mut files = Vec::new();
@@ -405,7 +506,8 @@ impl ResourceIndex {
         let end = call.span.end as usize - 1;
         let cursor = offset_at(&document.text, position)?.clamp(start, end);
         let prefix = document.text.get(start..cursor)?;
-        let mut labels: BTreeMap<_, ()> = self.system.clone();
+        let mut labels: BTreeMap<_, ()> =
+            self.system.keys().cloned().map(|key| (key, ())).collect();
         for resource in self.resources.iter().filter(|r| self.in_scope(r, source)) {
             labels.insert(resource.label.clone(), ());
         }
@@ -428,9 +530,126 @@ impl ResourceIndex {
         uri: impl Fn(&Path) -> String,
     ) -> Option<Value> {
         let call = document.resource_at(position)?;
+        let origin = range(&document.text, call.span);
+        if call.value.starts_with("sys.") {
+            // Match the reference server, but jump to the exact property when it exists.
+            let definition = if let Some(resource) = self.system.get(&call.value) {
+                let path = &self.system_paths[resource.file];
+                json!({"originSelectionRange":origin,"targetUri":uri(path),
+                    "targetRange":resource.selection,"targetSelectionRange":resource.selection})
+            } else if let Some(path) = self.system_paths.first() {
+                let top = json!({"start":{"line":0,"character":0},"end":{"line":0,"character":0}});
+                json!({"originSelectionRange":origin,"targetUri":uri(path),
+                    "targetRange":top,"targetSelectionRange":top})
+            } else {
+                return Some(json!([]));
+            };
+            return Some(json!([definition]));
+        }
         let definitions: Vec<_> = self.resources.iter().filter(|r| r.label == call.value && self.in_scope(r, source)).map(|r|
-            json!({"originSelectionRange":range(&document.text,call.span),"targetUri":uri(&r.path),"targetRange":r.selection,"targetSelectionRange":r.selection})).collect();
+            json!({"originSelectionRange":origin,"targetUri":uri(&r.path),"targetRange":r.selection,"targetSelectionRange":r.selection})).collect();
         Some(json!(definitions))
+    }
+
+    pub fn system_hover(
+        &self,
+        document: &Document,
+        position: &Value,
+        chinese: bool,
+    ) -> Option<Value> {
+        let call = document.resource_at(position)?;
+        let resource = self.system.get(&call.value)?;
+        let path = self.system_paths.get(resource.file)?;
+        let kind = call
+            .value
+            .strip_prefix("sys.")
+            .and_then(|value| value.split_once('.'))
+            .map(|(kind, _)| kind)
+            .unwrap_or_default();
+        let labels = if chinese {
+            [
+                "属性",
+                "值",
+                "资源类型",
+                "资源 ID",
+                "默认值",
+                "深色值",
+                "SDK 文件",
+            ]
+        } else {
+            [
+                "Properties",
+                "Value",
+                "Resource type",
+                "Resource id",
+                "Value (base)",
+                "Value (dark)",
+                "SDK file",
+            ]
+        };
+        let mut rows = vec![
+            (labels[2], kind.to_string()),
+            (labels[3], resource.id.clone()),
+        ];
+        let mut has_value = false;
+        for (qualifier, label) in [("base", labels[4]), ("dark", labels[5])] {
+            if let Some(value) = self.system_value(&resource.id, qualifier) {
+                rows.push((label, value));
+                has_value = true;
+            }
+        }
+        if !has_value {
+            if let Some((qualifier, value)) = self
+                .system_values
+                .get(&resource.id)
+                .and_then(|values| values.iter().next())
+            {
+                rows.push((labels[1], format!("{value} ({qualifier})")));
+            }
+        }
+        rows.push((labels[6], path.display().to_string()));
+        let mut value = format!(
+            "**{}**\n\n| {} | {} |\n|------|----|\n",
+            call.value, labels[0], labels[1]
+        );
+        for (label, cell) in rows {
+            value.push_str(&format!(
+                "| {label} | `{}` |\n",
+                cell.replace('`', "'")
+                    .replace('|', "\\|")
+                    .replace('\n', " ")
+            ));
+        }
+        Some(
+            json!({"contents":{"kind":"markdown","value":value},"range":range(&document.text,call.span)}),
+        )
+    }
+
+    /// Resolves `$color:<id>` style aliases within the same qualifier.
+    fn system_value(&self, id: &str, qualifier: &str) -> Option<String> {
+        let values = self.system_values.get(id)?;
+        let mut value = values.get(qualifier)?.clone();
+        for _ in 0..8 {
+            let Some(reference) = value
+                .strip_prefix('$')
+                .and_then(|rest| rest.split_once(':'))
+                .map(|(_, id)| id)
+            else {
+                break;
+            };
+            let Some(next) = self
+                .system_values
+                .get(reference)
+                .and_then(|values| values.get(qualifier))
+            else {
+                break;
+            };
+            if *next == value {
+                break;
+            }
+            value = next.clone();
+        }
+        Some(value)
     }
 
     pub fn media_hover(
@@ -485,10 +704,11 @@ impl ResourceIndex {
                     format!(
                         "Resource {} not found in current scope. Indexed system resources: {}",
                         call.value,
-                        self.system_path
-                            .as_ref()
+                        self.system_paths
+                            .iter()
                             .map(|p| p.display().to_string())
-                            .unwrap_or_default()
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ),
                 )
             } else if call.value.starts_with("app") {
@@ -625,5 +845,142 @@ mod tests {
             .unwrap();
         assert_eq!(list["items"].as_array().unwrap().len(), 1);
         assert_eq!(list["items"][0]["label"], "app.string.entry");
+    }
+
+    #[test]
+    fn system_resources_complete_define_and_hover_from_sdk_and_hms() {
+        let root = tempfile::tempdir().unwrap();
+        let loader = root
+            .path()
+            .join("sdk")
+            .join("ets")
+            .join("build-tools")
+            .join("ets-loader");
+        fs::create_dir_all(&loader).unwrap();
+        let oh_text = "module.exports.sys = {\n  color: {\n    comp_background_list_card: 125831127,\n    alias_color: 125831128,\n  },\n};";
+        fs::write(loader.join("sysResource.js"), oh_text).unwrap();
+        let previewer = root
+            .path()
+            .join("sdk")
+            .join("previewer")
+            .join("common")
+            .join("resources")
+            .join("entry");
+        fs::create_dir_all(&previewer).unwrap();
+        fs::write(
+            previewer.join("resources.txt"),
+            concat!(
+                "base\n",
+                "id:125831127, '#FFFFFF' 'comp_background_list_card'\n",
+                "id:125831128, '$color:125831127' 'alias_color'\n",
+                "dark\n",
+                "id:125831127, '#19FFFFFF' 'comp_background_list_card'\n"
+            ),
+        )
+        .unwrap();
+        let hms = root.path().join("hms").join("ets");
+        fs::create_dir_all(&hms).unwrap();
+        let hms_text = "module.exports.sys = {\n  string: {\n    hms_only: 130023424,\n  },\n};";
+        fs::write(hms.join("sysResource.js"), hms_text).unwrap();
+        let options = json!({"ets": {
+            "sdkPath": root.path().join("sdk").to_string_lossy(),
+            "hmsPath": root.path().join("hms").to_string_lossy()
+        }});
+        let index = ResourceIndex::load(&[root.path().into()], &options);
+        let source = root.path().join("entry/src/main/ets/Index.ets");
+        let doc = Document::parse(
+            concat!(
+                "const a = $r('sys.color.comp_background_list_card');\n",
+                "const b = $r('sys.string.hms_only');\n",
+                "const c = $r('sys.color.missing');\n",
+                "const d = $r('sys.color.alias_color');\n"
+            )
+            .into(),
+        );
+        let at = |value: &str, add: usize| {
+            let call = doc
+                .resource_calls
+                .iter()
+                .find(|call| call.value == value)
+                .unwrap();
+            position_at(&doc.text, call.span.start as usize + add)
+        };
+
+        let partial = Document::parse("const p = $r('sys.');".into());
+        let p = position_at(
+            &partial.text,
+            partial.resource_calls[0].span.start as usize + 5,
+        );
+        let list = index.completions(&partial, &p, &source).unwrap();
+        let labels: Vec<_> = list["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["label"].as_str().unwrap())
+            .collect();
+        assert!(labels.contains(&"sys.color.comp_background_list_card"));
+        assert!(labels.contains(&"sys.string.hms_only"));
+
+        let definition = index
+            .definitions(
+                &doc,
+                &at("sys.color.comp_background_list_card", 3),
+                &source,
+                |path| path.display().to_string(),
+            )
+            .unwrap();
+        let definition = &definition.as_array().unwrap()[0];
+        assert_eq!(
+            Path::new(definition["targetUri"].as_str().unwrap()),
+            loader.join("sysResource.js")
+        );
+        let expected = position_at(oh_text, oh_text.find("comp_background_list_card").unwrap());
+        assert_eq!(
+            definition["targetSelectionRange"]["start"]["line"],
+            expected["line"]
+        );
+        assert_eq!(
+            definition["targetSelectionRange"]["start"]["character"],
+            expected["character"]
+        );
+
+        let hms_definition = index
+            .definitions(&doc, &at("sys.string.hms_only", 3), &source, |path| {
+                path.display().to_string()
+            })
+            .unwrap();
+        assert_eq!(
+            Path::new(
+                hms_definition.as_array().unwrap()[0]["targetUri"]
+                    .as_str()
+                    .unwrap()
+            ),
+            hms.join("sysResource.js")
+        );
+
+        let hover = index
+            .system_hover(&doc, &at("sys.color.comp_background_list_card", 3), true)
+            .unwrap();
+        let value = hover["contents"]["value"].as_str().unwrap();
+        assert!(value.contains("125831127"));
+        assert!(value.contains("#FFFFFF"));
+        assert!(value.contains("#19FFFFFF"));
+        assert!(value.contains("sysResource.js"));
+
+        let alias = index
+            .system_hover(&doc, &at("sys.color.alias_color", 3), true)
+            .unwrap();
+        assert!(alias["contents"]["value"]
+            .as_str()
+            .unwrap()
+            .contains("#FFFFFF"));
+
+        let diagnostics = index.diagnostics(&doc, &source);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0]["code"], "SYS_RESOURCE_NOT_FOUND");
+        assert!(diagnostics[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains(&hms.join("sysResource.js").display().to_string()));
     }
 }
