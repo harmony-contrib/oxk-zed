@@ -4,7 +4,7 @@ ArkTS (`.ets`) support for Zed, powered by a native language server built on **t
 
 - Syntax highlighting from [`harmony-contrib/tree-sitter-arkts`](https://github.com/harmony-contrib/tree-sitter-arkts).
 - Completion, hover, navigation, references, rename, symbols, signature help, highlights, folding, inlay hints, semantic tokens, code actions, and type diagnostics from one Rust process.
-- ArkUI declarations and `$r` resource completion/diagnostics from an installed OpenHarmony or HarmonyOS SDK.
+- ArkUI declarations and `$r` resource completion, hover, go-to-definition and diagnostics from an installed OpenHarmony or HarmonyOS SDK, including `sys.*` entries from both `ets-loader` and HMS `sysResource.js` tables.
 - Formatting and linting through `@ohos-rs/oxk` (`oxk-formatter` and `oxk-linter`).
 - An optional **OXK Symbols** file icon theme with an ArkTS `.ets` icon.
 
