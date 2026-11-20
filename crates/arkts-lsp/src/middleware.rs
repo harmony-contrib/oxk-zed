@@ -1,4 +1,4 @@
-use arkts_services::{Document, ResourceIndex};
+use arkts_services::{Document, Json5Document, ResourceIndex};
 use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
@@ -12,6 +12,7 @@ use tsrs_lsproto::{Error, Message};
 
 pub(crate) struct HostState {
     documents: BTreeMap<String, Arc<Document>>,
+    json5_documents: BTreeMap<String, Arc<Json5Document>>,
     requests: BTreeMap<String, PendingRequest>,
     roots: Vec<PathBuf>,
     resources: ResourceIndex,
@@ -32,12 +33,14 @@ struct CachedDiagnostics {
 struct PendingRequest {
     message: Value,
     document: Option<Arc<Document>>,
+    json5: Option<Arc<Json5Document>>,
 }
 
 impl Default for HostState {
     fn default() -> Self {
         Self {
             documents: BTreeMap::new(),
+            json5_documents: BTreeMap::new(),
             requests: BTreeMap::new(),
             roots: Vec::new(),
             resources: ResourceIndex::default(),
@@ -111,20 +114,21 @@ impl HostState {
                     Some("initialize" | "shutdown" | "codeAction/resolve" | "documentLink/resolve")
                 ))
         {
+            let uri = message
+                .pointer("/params/textDocument/uri")
+                .and_then(Value::as_str);
             let document = needs_document
-                .then(|| {
-                    message
-                        .pointer("/params/textDocument/uri")
-                        .and_then(Value::as_str)
-                        .and_then(|uri| self.documents.get(uri))
-                        .cloned()
-                })
+                .then(|| uri.and_then(|uri| self.documents.get(uri)).cloned())
+                .flatten();
+            let json5 = needs_document
+                .then(|| uri.and_then(|uri| self.json5_documents.get(uri)).cloned())
                 .flatten();
             self.requests.insert(
                 message["id"].to_string(),
                 PendingRequest {
                     message: message.clone(),
                     document,
+                    json5,
                 },
             );
         }
@@ -148,14 +152,31 @@ impl HostState {
                     params["textDocument"]["uri"].as_str(),
                     params["textDocument"]["text"].as_str(),
                 ) {
-                    self.documents
-                        .insert(uri.into(), Arc::new(Document::parse(text.into())));
+                    let path = PathBuf::from(tsrs_lsproto::DocumentUri(uri.into()).file_name());
+                    if is_arkts_config(&path) {
+                        self.documents.remove(uri);
+                        self.json5_documents
+                            .insert(uri.into(), Arc::new(Json5Document::parse(text.into())));
+                    } else {
+                        self.json5_documents.remove(uri);
+                        self.documents
+                            .insert(uri.into(), Arc::new(Document::parse(text.into())));
+                    }
                 }
             }
             Some("textDocument/didChange") => {
                 if let Some(uri) = params["textDocument"]["uri"].as_str() {
-                    if let Some(document) = self.documents.get(uri) {
-                        let mut text = document.text.clone();
+                    let is_json5 = self.json5_documents.contains_key(uri);
+                    let text = self
+                        .documents
+                        .get(uri)
+                        .map(|document| document.text.clone())
+                        .or_else(|| {
+                            self.json5_documents
+                                .get(uri)
+                                .map(|document| document.text.clone())
+                        });
+                    if let Some(mut text) = text {
                         if let Some(changes) = params["contentChanges"].as_array() {
                             for change in changes {
                                 let Some(new) = change["text"].as_str() else {
@@ -177,14 +198,20 @@ impl HostState {
                                 }
                             }
                         }
-                        self.documents
-                            .insert(uri.into(), Arc::new(Document::parse(text)));
+                        if is_json5 {
+                            self.json5_documents
+                                .insert(uri.into(), Arc::new(Json5Document::parse(text)));
+                        } else {
+                            self.documents
+                                .insert(uri.into(), Arc::new(Document::parse(text)));
+                        }
                     }
                 }
             }
             Some("textDocument/didClose") => {
                 if let Some(uri) = params["textDocument"]["uri"].as_str() {
                     self.documents.remove(uri);
+                    self.json5_documents.remove(uri);
                     self.arkts_diagnostics.remove(uri);
                 }
             }
@@ -215,10 +242,33 @@ impl HostState {
     pub fn shutdown_completed(&self) -> bool {
         self.shutdown_completed
     }
-    fn extra_result(&self, request: &Value, document: &Document) -> Option<Value> {
+    fn extra_result(
+        &self,
+        request: &Value,
+        document: Option<&Document>,
+        json5: Option<&Json5Document>,
+    ) -> Option<Value> {
         let uri = request.pointer("/params/textDocument/uri")?.as_str()?;
         let source = PathBuf::from(tsrs_lsproto::DocumentUri(uri.into()).file_name());
         let pos = &request["params"]["position"];
+        if let Some(json5) = json5 {
+            return match request["method"].as_str()? {
+                "textDocument/hover" => {
+                    self.resources
+                        .json5_hover(json5, pos, &source, self.chinese)
+                }
+                "textDocument/completion" => self.resources.json5_completions(json5, pos, &source),
+                "textDocument/definition" => self
+                    .resources
+                    .json5_definitions(json5, pos, &source, file_uri),
+                "textDocument/documentLink" => Some(
+                    self.resources
+                        .json5_document_links(json5, &source, file_uri),
+                ),
+                _ => None,
+            };
+        }
+        let document = document?;
         match request["method"].as_str()? {
             "textDocument/hover" => document.binding_hover(pos, self.chinese).or_else(|| {
                 self.resources
@@ -237,6 +287,17 @@ impl HostState {
             _ => None,
         }
     }
+}
+
+fn is_arkts_config(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            matches!(
+                name,
+                "module.json5" | "module.json" | "app.json5" | "app.json"
+            )
+        })
 }
 
 fn file_uri(path: &Path) -> String {
@@ -271,7 +332,7 @@ impl<W: Write> SdkWriter<W> {
             }
             if method == "textDocument/publishDiagnostics" {
                 if let Some(uri) = message["params"]["uri"].as_str().map(ToString::to_string) {
-                    self.add_diagnostics(&uri, &mut message["params"]["diagnostics"], None);
+                    self.add_diagnostics(&uri, &mut message["params"]["diagnostics"], None, None);
                 }
             }
             return;
@@ -288,7 +349,19 @@ impl<W: Write> SdkWriter<W> {
         let request = pending.message;
         // Native cancellation/validation errors must remain errors. Only methods
         // implemented by this host can replace tsrs's unknown-method response.
+        let json5_request = pending.json5.is_some()
+            && matches!(
+                request["method"].as_str(),
+                Some(
+                    "textDocument/hover"
+                        | "textDocument/completion"
+                        | "textDocument/definition"
+                        | "textDocument/documentLink"
+                        | "textDocument/diagnostic"
+                )
+            );
         if message.get("error").is_some()
+            && !json5_request
             && !(matches!(
                 request["method"].as_str(),
                 Some("textDocument/documentLink" | "documentLink/resolve" | "codeAction/resolve")
@@ -332,8 +405,20 @@ impl<W: Write> SdkWriter<W> {
                     .pointer("/params/textDocument/uri")
                     .and_then(Value::as_str)
                 {
+                    if pending.json5.is_some()
+                        && !matches!(message.pointer("/result/items"), Some(Value::Array(_)))
+                    {
+                        // tsrs does not model JSON5 files; resource diagnostics are still valid.
+                        message.as_object_mut().unwrap().remove("error");
+                        message["result"] = json!({"items": [], "kind": "full"});
+                    }
                     if let Some(items) = message.pointer_mut("/result/items") {
-                        self.add_diagnostics(uri, items, pending.document.clone());
+                        self.add_diagnostics(
+                            uri,
+                            items,
+                            pending.document.clone(),
+                            pending.json5.clone(),
+                        );
                     }
                 }
             }
@@ -348,12 +433,19 @@ impl<W: Write> SdkWriter<W> {
             }
             _ => {}
         }
-        if let Some(document) = pending.document.as_deref() {
-            if let Some(extra) = self.state.lock().unwrap().extra_result(&request, document) {
+        if pending.document.is_some() || pending.json5.is_some() {
+            if let Some(extra) = self.state.lock().unwrap().extra_result(
+                &request,
+                pending.document.as_deref(),
+                pending.json5.as_deref(),
+            ) {
                 message.as_object_mut().unwrap().remove("error");
                 message["result"] = extra;
             }
-            if request["method"] == "textDocument/codeAction" {
+            if let (Some(document), "textDocument/codeAction") = (
+                pending.document.as_deref(),
+                request["method"].as_str().unwrap_or_default(),
+            ) {
                 if let Some(actions) = message["result"].as_array_mut() {
                     actions.retain(|action| !no_op_action(action, &request, document));
                 }
@@ -368,23 +460,45 @@ impl<W: Write> SdkWriter<W> {
         }
     }
 
-    fn add_diagnostics(&self, uri: &str, items: &mut Value, snapshot: Option<Arc<Document>>) {
-        let (document, ctx, extra) = {
+    fn add_diagnostics(
+        &self,
+        uri: &str,
+        items: &mut Value,
+        snapshot: Option<Arc<Document>>,
+        json5_snapshot: Option<Arc<Json5Document>>,
+    ) {
+        let (document, json5, ctx, extra) = {
             let state = self.state.lock().unwrap();
-            let Some(document) = snapshot.or_else(|| state.documents.get(uri).cloned()) else {
-                return;
+            let json5 = json5_snapshot.or_else(|| state.json5_documents.get(uri).cloned());
+            let document = if json5.is_some() {
+                None
+            } else {
+                snapshot.or_else(|| state.documents.get(uri).cloned())
             };
+            if json5.is_none() && document.is_none() {
+                return;
+            }
             let file = PathBuf::from(tsrs_lsproto::DocumentUri(uri.into()).file_name());
-            let extra = state.resources.diagnostics(&document, &file);
-            (document, state.context.clone(), extra)
+            let extra = if let Some(json5) = &json5 {
+                state.resources.json5_diagnostics(json5, &file)
+            } else if let Some(document) = &document {
+                state.resources.diagnostics(document, &file)
+            } else {
+                Vec::new()
+            };
+            (document, json5, state.context.clone(), extra)
         };
         let Some(items) = items.as_array_mut() else {
             return;
         };
         items.extend(extra);
-        if let Some(server) = self.server.get().and_then(Weak::upgrade) {
-            if let Some(extra) = self.arkts_diagnostics(server.session(), &ctx, uri, &document) {
-                items.extend(extra.iter().cloned());
+        if json5.is_none() {
+            if let (Some(server), Some(document)) =
+                (self.server.get().and_then(Weak::upgrade), document.as_ref())
+            {
+                if let Some(extra) = self.arkts_diagnostics(server.session(), &ctx, uri, document) {
+                    items.extend(extra.iter().cloned());
+                }
             }
         }
         // Retain suggestion tags and stable order as in the previous server's diagnostics.
@@ -515,6 +629,53 @@ impl<W: Write + Send> Writer for SdkWriter<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn json5_config_documents_are_parsed_updated_and_closed() {
+        let mut state = HostState::default();
+        let uri = "file:///tmp/entry/src/main/module.json5";
+        state
+            .observe(&json!({"method":"textDocument/didOpen","params":{
+                "textDocument":{"uri":uri,"text":"{module:{icon:\"$media:icon\"}}"}
+            }}))
+            .unwrap();
+        assert!(state.document(uri).is_none());
+        assert_eq!(
+            state.json5_documents.get(uri).unwrap().strings[0].value,
+            "$media:icon"
+        );
+
+        state
+            .observe(&json!({"method":"textDocument/didChange","params":{
+                "textDocument":{"uri":uri,"version":2},
+                "contentChanges":[{"text":"{module:{icon:'$media:other'}}"}]
+            }}))
+            .unwrap();
+        assert_eq!(
+            state.json5_documents.get(uri).unwrap().strings[0].value,
+            "$media:other"
+        );
+
+        let request = json!({"method":"textDocument/documentLink","params":{
+            "textDocument":{"uri":uri}
+        }});
+        let extra = state.extra_result(
+            &request,
+            None,
+            state
+                .json5_documents
+                .get(uri)
+                .map(|document| document.as_ref()),
+        );
+        assert!(extra.is_some());
+
+        state
+            .observe(&json!({"method":"textDocument/didClose","params":{
+                "textDocument":{"uri":uri}
+            }}))
+            .unwrap();
+        assert!(state.json5_documents.get(uri).is_none());
+    }
 
     struct DiagnosticFixture {
         directory: tempfile::TempDir,
