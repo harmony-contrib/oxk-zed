@@ -1,4 +1,10 @@
 //! Editor-independent ArkTS additions, parsed with the local OXC ArkTS parser.
+mod json5;
+mod permissions;
+
+pub use json5::Json5Document;
+pub use permissions::{permissions, Permission};
+
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, AssignmentExpression, CallExpression, Expression, ObjectPropertyKind,
@@ -172,7 +178,8 @@ impl Document {
                     .into_iter()
                     .flatten()
                     .map(|base| base.join(&s.value))
-                    .find(|path| path.exists());
+                    .find(|path| path.exists())
+                    .map(clean_path);
                 if let Some(path) = path {
                     links.push(json!({"range":range(&self.text,s.span),"target":uri(&path)}));
                 }
@@ -225,7 +232,12 @@ impl<'a> Visit<'a> for SystemResources {
     }
 }
 
-fn contains(span: Span, offset: usize) -> bool {
+/// Drops `.` components so document links do not contain `./` segments.
+fn clean_path(path: PathBuf) -> PathBuf {
+    path.components().collect()
+}
+
+pub(crate) fn contains(span: Span, offset: usize) -> bool {
     span.start as usize <= offset && offset <= span.end as usize
 }
 
@@ -269,6 +281,20 @@ pub struct Resource {
     pub path: PathBuf,
     pub selection: Value,
     pub qualifiers: String,
+}
+
+const JSON5_RESOURCE_TYPES: [&str; 9] = [
+    "color", "string", "float", "boolean", "integer", "media", "profile", "symbol", "plural",
+];
+
+fn json5_resource(value: &str) -> Option<(&str, &str)> {
+    let (kind, name) = value.strip_prefix('$')?.split_once(':')?;
+    (!kind.is_empty() && !name.is_empty()).then_some((kind, name))
+}
+
+fn json5_label(value: &str) -> Option<String> {
+    let (kind, name) = json5_resource(value)?;
+    Some(format!("app.{kind}.{name}"))
 }
 
 #[derive(Clone, Debug)]
@@ -652,6 +678,280 @@ impl ResourceIndex {
         Some(value)
     }
 
+    fn string_edit(document: &Json5Document, call: &ResourceCall) -> Option<(usize, usize)> {
+        let start = call.span.start as usize + 1;
+        let end = (call.span.end as usize).checked_sub(1)?;
+        (start <= end && end <= document.text.len()).then_some((start, end))
+    }
+
+    pub fn json5_completions(
+        &self,
+        document: &Json5Document,
+        position: &Value,
+        source: &Path,
+    ) -> Option<Value> {
+        let call = document.string_at(position)?;
+        let (start, end) = Self::string_edit(document, call)?;
+        let cursor = offset_at(&document.text, position)?.clamp(start, end);
+        let prefix = document.text.get(start..cursor)?;
+        let edit = |new_text: &str| {
+            json!({
+                "range": {
+                    "start": position_at(&document.text, start),
+                    "end": position_at(&document.text, end)
+                },
+                "newText": new_text
+            })
+        };
+
+        if document
+            .permissions
+            .iter()
+            .any(|permission| permission.span == call.span)
+        {
+            let items: Vec<_> = permissions()
+                .iter()
+                .filter(|(name, _)| name.starts_with(prefix))
+                .map(|(name, permission)| {
+                    json!({"label":name,"kind":12,"detail":permission.description,
+                        "textEdit":edit(name)})
+                })
+                .collect();
+            return Some(json!({"isIncomplete":false,"items":items}));
+        }
+
+        if let Some(rest) = prefix.strip_prefix('$') {
+            let mut items = Vec::new();
+            match rest.split_once(':') {
+                Some((kind, _)) if JSON5_RESOURCE_TYPES.contains(&kind) => {
+                    // The same resource appears once per qualifier directory; list it once.
+                    let mut labels = BTreeMap::new();
+                    for resource in self.resources.iter().filter(|r| self.in_scope(r, source)) {
+                        let Some(rest) = resource.label.strip_prefix("app.") else {
+                            continue;
+                        };
+                        let Some((resource_kind, name)) = rest.split_once('.') else {
+                            continue;
+                        };
+                        let label = format!("${resource_kind}:{name}");
+                        if resource_kind == kind && label.starts_with(prefix) {
+                            labels.insert(label, ());
+                        }
+                    }
+                    items.extend(labels.keys().map(|label| {
+                        json!({"label":label,"kind":12,"detail":label,
+                            "textEdit":edit(label)})
+                    }));
+                }
+                Some(_) => {}
+                None => {
+                    for kind in JSON5_RESOURCE_TYPES {
+                        let label = format!("${kind}:");
+                        if label.starts_with(prefix) {
+                            items.push(json!({"label":label,"kind":12,"detail":label,
+                                "textEdit":edit(&label)}));
+                        }
+                    }
+                }
+            }
+            return Some(json!({"isIncomplete":false,"items":items}));
+        }
+
+        // Path completion mirrors the reference server: only offer it for path-like prefixes.
+        if prefix.contains('/') || prefix.starts_with('.') {
+            let base = source.parent()?;
+            let directory = base.join(prefix);
+            if !directory.is_dir() {
+                return Some(json!({"isIncomplete":false,"items":[]}));
+            }
+            let Ok(entries) = fs::read_dir(&directory) else {
+                return Some(json!({"isIncomplete":false,"items":[]}));
+            };
+            let mut entries: Vec<_> = entries.flatten().collect();
+            entries.sort_by_key(|entry| entry.file_name());
+            let items: Vec<_> = entries
+                .into_iter()
+                .map(|entry| {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    json!({"label":name,"kind":12,"detail":name,
+                        "textEdit":edit(&format!("{prefix}{name}"))})
+                })
+                .collect();
+            return Some(json!({"isIncomplete":false,"items":items}));
+        }
+
+        None
+    }
+
+    pub fn json5_definitions(
+        &self,
+        document: &Json5Document,
+        position: &Value,
+        source: &Path,
+        uri: impl Fn(&Path) -> String,
+    ) -> Option<Value> {
+        let call = document.string_at(position)?;
+        let label = json5_label(&call.value)?;
+        let origin = range(&document.text, call.span);
+        let definitions: Vec<_> = self
+            .resources
+            .iter()
+            .filter(|resource| resource.label == label && self.in_scope(resource, source))
+            .map(|resource| {
+                json!({"originSelectionRange":origin,"targetUri":uri(&resource.path),
+                    "targetRange":resource.selection,"targetSelectionRange":resource.selection})
+            })
+            .collect();
+        Some(json!(definitions))
+    }
+
+    pub fn json5_document_links(
+        &self,
+        document: &Json5Document,
+        source: &Path,
+        uri: impl Fn(&Path) -> String,
+    ) -> Value {
+        let directory = source
+            .ancestors()
+            .find(|path| path.join("module.json5").is_file())
+            .or_else(|| source.parent());
+        let mut links = Vec::new();
+        if let Some(directory) = directory {
+            for call in &document.strings {
+                if call.value.is_empty() || call.value == "." || call.value.starts_with('$') {
+                    continue;
+                }
+                let path = [Some(directory), source.parent()]
+                    .into_iter()
+                    .flatten()
+                    .map(|base| base.join(&call.value))
+                    .find(|path| path.exists())
+                    .map(clean_path);
+                if let Some(path) = path {
+                    links
+                        .push(json!({"range":range(&document.text,call.span),"target":uri(&path)}));
+                }
+            }
+        }
+        json!(links)
+    }
+
+    pub fn json5_hover(
+        &self,
+        document: &Json5Document,
+        position: &Value,
+        source: &Path,
+        chinese: bool,
+    ) -> Option<Value> {
+        let call = document.string_at(position)?;
+        if document
+            .permissions
+            .iter()
+            .any(|permission| permission.span == call.span)
+        {
+            let permission = permissions().get(&call.value)?;
+            let labels = if chinese {
+                ["权限级别", "权限类型", "授权方式", "起始版本", "说明"]
+            } else {
+                [
+                    "Level",
+                    "Type",
+                    "Grant mode",
+                    "Start version",
+                    "Description",
+                ]
+            };
+            let mut value = format!(
+                "**{}**\n\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}\n",
+                call.value,
+                labels[0],
+                permission.level,
+                labels[1],
+                permission.kind,
+                labels[2],
+                permission.grant_mode,
+                labels[3],
+                permission.start_version,
+                labels[4],
+                permission.description
+            );
+            if !permission.note.is_empty() {
+                let note = if chinese { "其他说明" } else { "Note" };
+                value.push_str(&format!("- {note}: {}\n", permission.note));
+            }
+            return Some(
+                json!({"contents":{"kind":"markdown","value":value},"range":range(&document.text,call.span)}),
+            );
+        }
+
+        let label = json5_label(&call.value)?;
+        let resources: Vec<_> = self
+            .resources
+            .iter()
+            .filter(|resource| resource.label == label && self.in_scope(resource, source))
+            .collect();
+        if resources.is_empty() {
+            return None;
+        }
+        let mut value = format!("**{}**\n\n", call.value);
+        for resource in resources {
+            value.push_str(&format!(
+                "- `{}` ({})\n",
+                resource.path.display(),
+                resource.qualifiers
+            ));
+        }
+        Some(
+            json!({"contents":{"kind":"markdown","value":value},"range":range(&document.text,call.span)}),
+        )
+    }
+
+    pub fn json5_diagnostics(&self, document: &Json5Document, source: &Path) -> Vec<Value> {
+        let mut result = Vec::new();
+        for call in document.references() {
+            let content = Span::new(call.span.start + 1, call.span.end.saturating_sub(1));
+            let Some((kind, name)) = call
+                .value
+                .strip_prefix('$')
+                .and_then(|rest| rest.split_once(':'))
+            else {
+                continue;
+            };
+            if !JSON5_RESOURCE_TYPES.contains(&kind) {
+                let types: Vec<_> = JSON5_RESOURCE_TYPES
+                    .iter()
+                    .map(|kind| format!("${kind}:"))
+                    .collect();
+                result.push(json!({"range":range(&document.text,content),"severity":1,
+                    "source":"ets","code":"INVALID_RESOURCE_TYPE",
+                    "message":format!("Invalid resource type: ${kind}, must be one of {}", types.join(", ")),
+                    "codeDescription":{"href":"https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/resource-categories-and-access#资源访问"}}));
+                continue;
+            }
+            let label = format!("app.{kind}.{name}");
+            let scope: Vec<_> = self
+                .resources
+                .iter()
+                .filter(|resource| self.in_scope(resource, source))
+                .collect();
+            if scope.is_empty() || scope.iter().any(|resource| resource.label == label) {
+                continue;
+            }
+            let mut directories: Vec<_> = scope
+                .iter()
+                .filter_map(|resource| resource.path.parent().and_then(Path::parent))
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect();
+            directories.sort();
+            directories.dedup();
+            result.push(json!({"range":range(&document.text,content),"severity":1,
+                "source":"ets","code":"APP_RESOURCE_NOT_FOUND",
+                "message":format!("Resource {} not found in current scope. Indexed application resources: {}", call.value, directories.join(", ")),
+                "codeDescription":{"href":"https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/resource-categories-and-access#资源访问"}}));
+        }
+        result
+    }
+
     pub fn media_hover(
         &self,
         document: &Document,
@@ -845,6 +1145,152 @@ mod tests {
             .unwrap();
         assert_eq!(list["items"].as_array().unwrap().len(), 1);
         assert_eq!(list["items"][0]["label"], "app.string.entry");
+    }
+
+    #[test]
+    fn json5_resources_complete_define_diagnose_and_hover() {
+        let root = tempfile::tempdir().unwrap();
+        let module = root.path().join("entry").join("src").join("main");
+        let element = module.join("resources").join("base").join("element");
+        fs::create_dir_all(&element).unwrap();
+        fs::write(
+            element.join("string.json"),
+            json!({"string": [{"name": "app_name", "value": "Demo"}]}).to_string(),
+        )
+        .unwrap();
+        let dark_element = module.join("resources").join("dark").join("element");
+        fs::create_dir_all(&dark_element).unwrap();
+        fs::write(
+            dark_element.join("string.json"),
+            json!({"string": [{"name": "app_name", "value": "Demo dark"}]}).to_string(),
+        )
+        .unwrap();
+        let media = module.join("resources").join("base").join("media");
+        fs::create_dir_all(&media).unwrap();
+        fs::write(media.join("icon.svg"), "<svg/>").unwrap();
+        let ets = module.join("ets").join("entryability");
+        fs::create_dir_all(&ets).unwrap();
+        fs::write(
+            ets.join("EntryAbility.ets"),
+            "export default class EntryAbility {}\n",
+        )
+        .unwrap();
+
+        let text = r#"{
+  // JSON5 syntax is accepted.
+  module: {
+    name: 'entry',
+    label: "$string:app_name",
+    icon: "$media:icon",
+    missing: '$media:missing',
+    bogus: '$bogus:x',
+    srcEntry: './ets/entryability/EntryAbility.ets',
+    requestPermissions: [
+      { name: 'ohos.permission.INTERNET' },
+    ],
+  },
+}"#;
+        let source = module.join("module.json5");
+        fs::write(&source, text).unwrap();
+        let index = ResourceIndex::load(&[root.path().into()], &json!({}));
+        let document = Json5Document::parse(text.into());
+        let at = |needle: &str, add: usize| {
+            position_at(&document.text, document.text.find(needle).unwrap() + add)
+        };
+
+        let diagnostics = index.json5_diagnostics(&document, &source);
+        let codes: Vec<_> = diagnostics
+            .iter()
+            .filter_map(|diagnostic| diagnostic["code"].as_str())
+            .collect();
+        assert_eq!(codes.len(), 2);
+        assert!(codes.contains(&"INVALID_RESOURCE_TYPE"));
+        assert!(codes.contains(&"APP_RESOURCE_NOT_FOUND"));
+
+        let completion = index
+            .json5_completions(&document, &at("$media:icon", 7), &source)
+            .unwrap();
+        let labels: Vec<_> = completion["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["label"].as_str().unwrap())
+            .collect();
+        assert_eq!(labels, ["$media:icon"]);
+
+        let completion = index
+            .json5_completions(&document, &at("$string:app_name", 8), &source)
+            .unwrap();
+        let labels: Vec<_> = completion["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["label"].as_str().unwrap())
+            .collect();
+        assert_eq!(labels, ["$string:app_name"]);
+
+        let completion = index
+            .json5_completions(&document, &at("ohos.permission.INTERNET", 16), &source)
+            .unwrap();
+        let labels: Vec<_> = completion["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["label"].as_str().unwrap())
+            .collect();
+        assert!(labels.contains(&"ohos.permission.INTERNET"));
+
+        let completion = index
+            .json5_completions(&document, &at("./ets/entryability/", 18), &source)
+            .unwrap();
+        assert!(completion["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["label"] == "EntryAbility.ets"));
+
+        let definition = index
+            .json5_definitions(&document, &at("$media:icon", 3), &source, |path| {
+                path.display().to_string()
+            })
+            .unwrap();
+        assert_eq!(
+            Path::new(
+                definition.as_array().unwrap()[0]["targetUri"]
+                    .as_str()
+                    .unwrap()
+            )
+            .file_name(),
+            Some(std::ffi::OsStr::new("icon.svg"))
+        );
+        let definitions = index
+            .json5_definitions(&document, &at("$string:app_name", 3), &source, |path| {
+                path.display().to_string()
+            })
+            .unwrap();
+        assert_eq!(definitions.as_array().unwrap().len(), 2);
+
+        let links =
+            index.json5_document_links(&document, &source, |path| path.display().to_string());
+        assert!(links.as_array().unwrap().iter().any(|link| {
+            Path::new(link["target"].as_str().unwrap()).file_name()
+                == Some(std::ffi::OsStr::new("EntryAbility.ets"))
+        }));
+
+        let hover = index
+            .json5_hover(&document, &at("ohos.permission.INTERNET", 8), &source, true)
+            .unwrap();
+        let value = hover["contents"]["value"].as_str().unwrap();
+        assert!(value.contains("ohos.permission.INTERNET"));
+        assert!(value.contains("权限级别"));
+
+        let hover = index
+            .json5_hover(&document, &at("$media:icon", 3), &source, true)
+            .unwrap();
+        assert!(hover["contents"]["value"]
+            .as_str()
+            .unwrap()
+            .contains("icon.svg"));
     }
 
     #[test]
