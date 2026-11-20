@@ -5,6 +5,7 @@ ArkTS (`.ets`) support for Zed, powered by a native language server built on **t
 - Syntax highlighting from [`harmony-contrib/tree-sitter-arkts`](https://github.com/harmony-contrib/tree-sitter-arkts).
 - Completion, hover, navigation, references, rename, symbols, signature help, highlights, folding, inlay hints, semantic tokens, code actions, and type diagnostics from one Rust process.
 - ArkUI declarations and `$r` resource completion, hover, go-to-definition and diagnostics from an installed OpenHarmony or HarmonyOS SDK, including `sys.*` entries from both `ets-loader` and HMS `sysResource.js` tables.
+- JSON5 configuration resources: `$type:name` completion, diagnostics and definitions in `module.json5`/`app.json5`, path completion and links, and `requestPermissions` completion/hover.
 - Formatting and linting through `@ohos-rs/oxk` (`oxk-formatter` and `oxk-linter`).
 - An optional **OXK Symbols** file icon theme with an ArkTS `.ets` icon.
 
@@ -108,13 +109,14 @@ The host adds:
 
 - SDK ArkTS restriction diagnostics, reusing the current Program and checker leases.
 - OXC-parsed `$r` completion, definition, missing-resource diagnostics, and media previews.
+- `module.json5` / `app.json5` `$type:name` completion, diagnostics and definitions, path completion and document links, plus `requestPermissions` completion and hover.
 - `$$this` documentation and checking through a position-preserving compiler view.
 - Existing-file document links with eager targets and optional resolve support.
 - UTF-16 edits, resource watcher refresh, and SDK configuration refresh.
 
 Resource completion uses an explicit replacement, including inside an existing name. OXC identifies `$$this` expressions before normalization, preserving strings and comments. Whole-document and range formatting are delegated to `oxk-formatter`.
 
-Current boundaries: resource scope follows module directories and shared `AppScope`; complex build-profile product/target filtering and dependency HAR resources under `oh_modules` are not implemented. JSON5 permission manifests are edited as plain JSON5. Diagnostics come from tsrs rather than DevEco's TypeScript build, so wording can differ.
+Current boundaries: resource scope follows module directories and shared `AppScope`; complex build-profile product/target filtering and dependency HAR resources under `oh_modules` are not implemented. Reverse navigation from `resources/element/*.json` back to `$r`/`module.json5` call sites is not implemented. Diagnostics come from tsrs rather than DevEco's TypeScript build, so wording can differ.
 
 ## File icon theme
 

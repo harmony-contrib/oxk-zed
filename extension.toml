@@ -13,10 +13,11 @@ rev = "9a97c1e6ac93bc07732c15050a0e560bc63c8d78"
 
 [language_servers.arkts-language-server]
 name = "ArkTS Language Server (tsrs)"
-language = "ArkTS"
+languages = ["ArkTS", "JSON5"]
 
 [language_servers.arkts-language-server.language_ids]
 "ArkTS" = "ets"
+"JSON5" = "json5"
 
 [language_servers.oxk-formatter]
 name = "Oxk Formatter"
